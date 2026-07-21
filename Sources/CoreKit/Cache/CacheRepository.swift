@@ -34,9 +34,50 @@ public enum CacheRepositoryError: Error, Sendable {
 
 // MARK: - Invalidation Policy
 
+/// Time-to-live policy applied to a `CacheRepository`.
+///
+/// - `never`: cached entries are always considered valid; nothing ever expires.
+///   Recommended when the file is a typed store for authoritative state
+///   (e.g. `.raw` envelope acting as the on-disk source of truth for a value
+///   the app owns) — pair with `.raw` for a cat/jq-able, non-expiring store.
+/// - `inTime(ttl:)`: cached entries expire after `ttl` seconds. In `.container`
+///   envelope the timestamp is stored inside the file; in `.raw` envelope the
+///   file's modification date (mtime) is used instead so the payload stays a
+///   clean JSON dump of `ModelType`.
 public enum InvalidateTime: Codable, Sendable {
     case never
     case inTime(ttl: TimeInterval)
+}
+
+// MARK: - Envelope Mode
+
+/// On-disk shape written by `CacheRepository`.
+///
+/// This is the "typed-option-description bar" for the file store — every case
+/// is documented with the shape it produces and when to prefer it.
+///
+/// - `container` (default, legacy): wraps `ModelType` inside a
+///   `CacheContainerModel` metadata envelope with `timestamp`, `modelType`,
+///   `body` (serialized model as a JSON string), `invalideTime` and
+///   `readCount`. Use this when you want in-file TTL bookkeeping, want to
+///   keep the historical file shape for existing on-disk caches, or plan to
+///   add schema-migration metadata later. This is what every existing 2-arg
+///   `CacheRepository(_:invalidateTime:)` call site produces — back-compat is
+///   preserved by construction.
+///
+/// - `raw`: encodes/decodes `ModelType` **directly** to the file so the
+///   file's bytes ARE the model's JSON representation — `cat`-able,
+///   `jq`-able, diff-able, human-readable. `exists` / `get` / `save` /
+///   `delete` semantics are identical to `.container`; TTL is honored via
+///   the file's mtime for `.inTime`. Pair with `InvalidateTime.never` when
+///   the file is meant to be the canonical typed store for a domain value
+///   (the shikki-side consolidation sweep uses this for
+///   `UnitProvenanceStore`, `PrePrBallotCache`, and every
+///   `JSONEncoder`-to-file sibling — one typed file store instead of N
+///   ad-hoc `JSONEncoder().encode → try Data.write` patterns).
+public enum EnvelopeMode: Sendable, Equatable {
+    case container
+    case raw
 }
 
 // MARK: - Internal Container
@@ -112,15 +153,72 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     /// Name of the file where cached data is saved.
     public let name: String
 
-    /// Document directory path for cache storage.
-    private let documentPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    /// Directory URL under which cache files are written.
+    ///
+    /// Resolved at init time from (in order):
+    ///  1. the caller-supplied `directory:` (created if missing)
+    ///  2. the process's `.documentDirectory`
+    ///  3. the process's `temporaryDirectory` (safe fallback — replaces the
+    ///     pre-existing `.first!` force-unwrap so sandboxed / non-app
+    ///     environments where `.documentDirectory` returns an empty array
+    ///     no longer crash)
+    private let documentPath: URL
 
     /// Time-to-live policy for cache invalidation.
     private(set) var invalidateTime: InvalidateTime
 
-    public init(_ name: String, invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60)) {
+    /// On-disk shape (see `EnvelopeMode`).
+    public let envelope: EnvelopeMode
+
+    /// Create a `CacheRepository`.
+    ///
+    /// - Parameters:
+    ///   - name: filename stem — every entry is written as `"<name>-<id>.cache"`.
+    ///   - invalidateTime: TTL policy. Default is `.inTime(ttl: 7 days)`.
+    ///     See `InvalidateTime` for per-case guidance.
+    ///   - directory: destination directory for cache files. `nil` (default)
+    ///     keeps the historical behavior (`.documentDirectory`, with a
+    ///     `temporaryDirectory` safe fallback if unavailable). A non-nil URL
+    ///     stores files under that directory and creates it if missing —
+    ///     useful when the caller manages an explicit typed store location
+    ///     (Application Support subdirectory, XDG cache path, workspace-
+    ///     scoped directory, unit-test temp dir).
+    ///   - envelope: on-disk shape. Default is `.container` — the historical
+    ///     `CacheContainerModel` metadata envelope. `.raw` writes the model's
+    ///     JSON directly so the file is `cat`/`jq`-able. See `EnvelopeMode`
+    ///     for per-case guidance. Existing 2-arg call sites keep `.container`
+    ///     automatically (back-compat preserved).
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        directory: URL? = nil,
+        envelope: EnvelopeMode = .container
+    ) {
         self.name = name
         self.invalidateTime = invalidateTime
+        self.envelope = envelope
+
+        // Resolve storage directory with a safe fallback chain — no more `.first!`.
+        let resolved: URL
+        if let directory {
+            resolved = directory
+        } else if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            resolved = docs
+        } else {
+            resolved = FileManager.default.temporaryDirectory
+            AppLog.cache.warning("CacheRepository: .documentDirectory unavailable — falling back to temporaryDirectory at \(resolved.path)")
+        }
+        self.documentPath = resolved
+
+        // Best-effort mkdir -p. If this fails, subsequent `save` writes will
+        // surface the underlying FileManager error via `encodedError`.
+        if !FileManager.default.fileExists(atPath: resolved.path) {
+            do {
+                try FileManager.default.createDirectory(at: resolved, withIntermediateDirectories: true)
+            } catch {
+                AppLog.cache.warning("CacheRepository: could not create directory \(resolved.path): \(error)")
+            }
+        }
     }
 
     nonisolated public func exists(_ id: String) -> Bool {
@@ -138,24 +236,8 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
             throw CacheRepositoryError.notFound
         }
 
-        do {
-            var container = try JSONDecoder().decode(CacheContainerModel<ModelType>.self, from: localCache)
-            // Synchronous version - only checks TTL, not network status
-            if try cacheIsValid(&container, hasNetwork: true) {
-                let data = try container.decoded()
-                AppLog.cache.debug("CacheRepository: get local data")
-                return data
-            } else {
-                try invalidateCache(id)
-            }
-
-            throw CacheRepositoryError.noCacheAvailable
-        } catch let error as CacheRepositoryError {
-            throw error
-        } catch {
-            AppLog.cache.error("Data in cache not decoded: \(error)")
-            throw CacheRepositoryError.decodedError
-        }
+        // Synchronous version — only checks TTL, not network status.
+        return try decode(id: id, fileUrl: fileUrl, data: localCache, hasNetwork: true)
     }
 
     /// Async version that checks network reachability.
@@ -170,41 +252,30 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
             throw CacheRepositoryError.notFound
         }
 
-        do {
-            var container = try JSONDecoder().decode(CacheContainerModel<ModelType>.self, from: localCache)
-
-            // Check network status for offline support
-            let hasNetwork: Bool
-            if checkNetworkReachability {
-                let interfaceType = await NetworkStatus.currentInterfaceType
-                hasNetwork = interfaceType != nil && interfaceType != .unknown
-            } else {
-                hasNetwork = true
-            }
-
-            if try cacheIsValid(&container, hasNetwork: hasNetwork) {
-                let data = try container.decoded()
-                AppLog.cache.debug("CacheRepository: get local data")
-                return data
-            } else {
-                try invalidateCache(id)
-            }
-
-            throw CacheRepositoryError.noCacheAvailable
-        } catch let error as CacheRepositoryError {
-            throw error
-        } catch {
-            AppLog.cache.error("Data in cache not decoded: \(error)")
-            throw CacheRepositoryError.decodedError
+        // Check network status for offline support
+        let hasNetwork: Bool
+        if checkNetworkReachability {
+            let interfaceType = await NetworkStatus.currentInterfaceType
+            hasNetwork = interfaceType != nil && interfaceType != .unknown
+        } else {
+            hasNetwork = true
         }
+
+        return try decode(id: id, fileUrl: fileUrl, data: localCache, hasNetwork: hasNetwork)
     }
 
     nonisolated public func save(_ id: String, data: ModelType) throws {
         let fileUrl = self.fileUrl(id)
 
         do {
-            let container = try CacheContainerModel(data: data, invalideTime: invalidateTime)
-            let toData = try JSONEncoder().encode(container)
+            let toData: Data
+            switch envelope {
+            case .container:
+                let container = try CacheContainerModel(data: data, invalideTime: invalidateTime)
+                toData = try JSONEncoder().encode(container)
+            case .raw:
+                toData = try JSONEncoder().encode(data)
+            }
             try toData.write(to: fileUrl, options: .atomic)
         } catch {
             AppLog.cache.error("Cache save error: \(error)")
@@ -223,6 +294,47 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         } catch let error {
             AppLog.cache.warning("Cache delete failed: \(error)")
             throw CacheRepositoryError.deleteError
+        }
+    }
+
+    // MARK: - Decoding (envelope-aware)
+
+    /// Central decode path used by both sync and async `get`. Handles both
+    /// envelope modes and TTL invalidation uniformly.
+    nonisolated private func decode(id: String, fileUrl: URL, data localCache: Data, hasNetwork: Bool) throws -> ModelType {
+        switch envelope {
+        case .container:
+            do {
+                var container = try JSONDecoder().decode(CacheContainerModel<ModelType>.self, from: localCache)
+                if try cacheIsValid(&container, hasNetwork: hasNetwork) {
+                    let data = try container.decoded()
+                    AppLog.cache.debug("CacheRepository: get local data (.container)")
+                    return data
+                } else {
+                    try invalidateCache(id)
+                }
+                throw CacheRepositoryError.noCacheAvailable
+            } catch let error as CacheRepositoryError {
+                throw error
+            } catch {
+                AppLog.cache.error("Data in cache not decoded: \(error)")
+                throw CacheRepositoryError.decodedError
+            }
+
+        case .raw:
+            // .raw has no in-file timestamp — TTL is honored via file mtime.
+            if rawIsExpired(fileUrl: fileUrl), hasNetwork {
+                try invalidateCache(id)
+                throw CacheRepositoryError.noCacheAvailable
+            }
+            do {
+                let data = try JSONDecoder().decode(ModelType.self, from: localCache)
+                AppLog.cache.debug("CacheRepository: get local data (.raw)")
+                return data
+            } catch {
+                AppLog.cache.error("Data in cache not decoded (.raw): \(error)")
+                throw CacheRepositoryError.decodedError
+            }
         }
     }
 
@@ -250,6 +362,24 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
             // If offline, use expired cache anyway (offline mode)
             // If online, invalidate and let caller fetch fresh data
             return !hasNetwork
+        }
+
+        return false
+    }
+
+    /// TTL check for `.raw` envelope — timestamp lives in the file's mtime,
+    /// not inside the payload (payload is the model itself).
+    nonisolated private func rawIsExpired(fileUrl: URL) -> Bool {
+        // `.never` never expires — regardless of file age.
+        if case .never = invalidateTime { return false }
+
+        if case .inTime(let ttl) = invalidateTime {
+            let attrs = try? FileManager.default.attributesOfItem(atPath: fileUrl.path)
+            guard let mtime = attrs?[.modificationDate] as? Date else {
+                // Can't read mtime → treat as fresh, don't destroy readable data.
+                return false
+            }
+            return mtime.timeIntervalSince1970 + ttl <= Date().timeIntervalSince1970
         }
 
         return false
