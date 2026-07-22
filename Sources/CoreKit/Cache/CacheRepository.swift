@@ -78,6 +78,87 @@ public enum InvalidateTime: Codable, Sendable {
 public enum EnvelopeMode: Sendable, Equatable {
     case container
     case raw
+    /// Writes a `String` payload VERBATIM (UTF-8 bytes, no JSON encoding at
+    /// all) and reads it back the same way — for stores whose file format is
+    /// contractually NOT JSON (markdown ballots, plain-text reports). The
+    /// repository's `ModelType` must be `String`; any other type throws
+    /// `encodedError` on save / `decodedError` on get. TTL rides the file
+    /// mtime exactly like `.raw`.
+    case rawString
+}
+
+// MARK: - FileNaming
+
+/// How a cache entry's FILENAME is derived from `(name, id)`.
+///
+/// The historical shape (`<name>-<id>.cache`) stays the default — every
+/// existing call site keeps its bytes on disk. The other cases exist for
+/// stores whose filename is a CONTRACT (consumers `cat`/`ls` them, other
+/// tools glob them): shikki's `.shikki-unit.json` worktree manifests,
+/// `pr-<n>.dossier.json` caches, `pr-<n>-<sha>.md` ballots.
+public enum FileNaming: Sendable {
+    /// Historical `"<name>-<id>.cache"` — the default, back-compat by
+    /// construction.
+    case legacy
+    /// The `id` IS the filename, with an optional extension appended:
+    /// `.bareId(ext: "json")` + id `"pr-7.dossier"` → `pr-7.dossier.json`;
+    /// `.bareId()` + id `".shikki-unit.json"` → `.shikki-unit.json`.
+    case bareId(ext: String? = nil)
+    /// Full control — `(name, id) -> filename`. The closure must be pure
+    /// and total; the same `(name, id)` must always yield the same filename
+    /// or `get` will never find what `save` wrote.
+    case custom(@Sendable (_ name: String, _ id: String) -> String)
+}
+
+// MARK: - CacheCodec
+
+/// JSON codec configuration for the `.raw` envelope.
+///
+/// `.container` deliberately ignores this — its on-disk shape is the
+/// historical envelope and changing its byte format would invalidate every
+/// existing cache. `.raw` files are the ones with human contracts
+/// (`cat`/`jq`/diff), so date representation and formatting are theirs to
+/// choose. `.rawString` bypasses JSON entirely.
+public struct CacheCodec: Sendable, Equatable {
+    public enum DateStrategy: Sendable, Equatable {
+        /// Foundation default (numeric `timeIntervalSinceReferenceDate`).
+        case deferredToDate
+        /// ISO-8601 strings — the human-readable/`jq`-friendly form.
+        case iso8601
+    }
+
+    public var dates: DateStrategy
+    public var prettyPrinted: Bool
+    public var sortedKeys: Bool
+
+    public init(dates: DateStrategy = .deferredToDate, prettyPrinted: Bool = false, sortedKeys: Bool = false) {
+        self.dates = dates
+        self.prettyPrinted = prettyPrinted
+        self.sortedKeys = sortedKeys
+    }
+
+    /// Historical `.raw` behavior — bare coders. The default.
+    public static let `default` = CacheCodec()
+
+    /// ISO-8601 dates + pretty-printed + sorted keys — the `cat`/`jq`-able
+    /// shape typed file stores want (shikki `.shikki-unit.json` contract).
+    public static let humanReadable = CacheCodec(dates: .iso8601, prettyPrinted: true, sortedKeys: true)
+
+    nonisolated func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        if case .iso8601 = dates { encoder.dateEncodingStrategy = .iso8601 }
+        var formatting: JSONEncoder.OutputFormatting = []
+        if prettyPrinted { formatting.insert(.prettyPrinted) }
+        if sortedKeys { formatting.insert(.sortedKeys) }
+        encoder.outputFormatting = formatting
+        return encoder
+    }
+
+    nonisolated func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        if case .iso8601 = dates { decoder.dateDecodingStrategy = .iso8601 }
+        return decoder
+    }
 }
 
 // MARK: - Internal Container
@@ -170,6 +251,12 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     /// On-disk shape (see `EnvelopeMode`).
     public let envelope: EnvelopeMode
 
+    /// Filename derivation (see `FileNaming`). `.legacy` by default.
+    public let naming: FileNaming
+
+    /// JSON codec configuration — honored by `.raw` only (see `CacheCodec`).
+    public let codec: CacheCodec
+
     /// Create a `CacheRepository`.
     ///
     /// - Parameters:
@@ -188,15 +275,25 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     ///     JSON directly so the file is `cat`/`jq`-able. See `EnvelopeMode`
     ///     for per-case guidance. Existing 2-arg call sites keep `.container`
     ///     automatically (back-compat preserved).
+    ///   - naming: filename derivation. `.legacy` (default) keeps the
+    ///     historical `"<name>-<id>.cache"`; `.bareId`/`.custom` exist for
+    ///     stores whose filename is a contract (see `FileNaming`).
+    ///   - codec: JSON codec configuration for `.raw` files (dates /
+    ///     pretty-print / sorted keys). `.container` ignores it by design —
+    ///     its byte shape is the historical envelope. See `CacheCodec`.
     public init(
         _ name: String,
         invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
         directory: URL? = nil,
-        envelope: EnvelopeMode = .container
+        envelope: EnvelopeMode = .container,
+        naming: FileNaming = .legacy,
+        codec: CacheCodec = .default
     ) {
         self.name = name
         self.invalidateTime = invalidateTime
         self.envelope = envelope
+        self.naming = naming
+        self.codec = codec
 
         // Resolve storage directory with a safe fallback chain — no more `.first!`.
         let resolved: URL
@@ -274,7 +371,13 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
                 let container = try CacheContainerModel(data: data, invalideTime: invalidateTime)
                 toData = try JSONEncoder().encode(container)
             case .raw:
-                toData = try JSONEncoder().encode(data)
+                toData = try codec.makeEncoder().encode(data)
+            case .rawString:
+                guard let text = data as? String else {
+                    AppLog.cache.error("Cache save error: .rawString requires ModelType == String, got \(ModelType.self)")
+                    throw CacheRepositoryError.encodedError
+                }
+                toData = Data(text.utf8)
             }
             try toData.write(to: fileUrl, options: .atomic)
         } catch {
@@ -328,13 +431,28 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
                 throw CacheRepositoryError.noCacheAvailable
             }
             do {
-                let data = try JSONDecoder().decode(ModelType.self, from: localCache)
+                let data = try codec.makeDecoder().decode(ModelType.self, from: localCache)
                 AppLog.cache.debug("CacheRepository: get local data (.raw)")
                 return data
             } catch {
                 AppLog.cache.error("Data in cache not decoded (.raw): \(error)")
                 throw CacheRepositoryError.decodedError
             }
+
+        case .rawString:
+            // Verbatim UTF-8 — same mtime-TTL rule as .raw.
+            if rawIsExpired(fileUrl: fileUrl), hasNetwork {
+                try invalidateCache(id)
+                throw CacheRepositoryError.noCacheAvailable
+            }
+            guard let text = String(data: localCache, encoding: .utf8),
+                  let model = text as? ModelType
+            else {
+                AppLog.cache.error("Data in cache not decoded (.rawString requires ModelType == String, got \(ModelType.self))")
+                throw CacheRepositoryError.decodedError
+            }
+            AppLog.cache.debug("CacheRepository: get local data (.rawString)")
+            return model
         }
     }
 
@@ -395,8 +513,15 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     }
 
     nonisolated private func fileUrl(_ id: String) -> URL {
-        let filename = name + "-" + id + ".cache"
-        let fileUrl = documentPath.appendingPathComponent(filename)
-        return fileUrl
+        let filename: String
+        switch naming {
+        case .legacy:
+            filename = name + "-" + id + ".cache"
+        case .bareId(let ext):
+            filename = ext.map { "\(id).\($0)" } ?? id
+        case .custom(let derive):
+            filename = derive(name, id)
+        }
+        return documentPath.appendingPathComponent(filename)
     }
 }
