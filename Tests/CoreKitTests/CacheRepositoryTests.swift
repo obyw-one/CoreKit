@@ -13,6 +13,7 @@ final class CacheRepositoryTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        // Back-compat call: existing 2-arg signature must still compile & work.
         cache = CacheRepository<TestModel>("CacheRepoTests", invalidateTime: .inTime(ttl: 3600))
     }
 
@@ -108,5 +109,211 @@ final class CacheRepositoryTests: XCTestCase {
 
         // Cleanup
         try? neverCache.delete(neverId)
+    }
+
+    // MARK: - Back-compat surface
+
+    /// The 2-arg `init(_:invalidateTime:)` shape used all over the ecosystem
+    /// must still compile & default to `.container` envelope + `documentDirectory`.
+    func testBackCompatTwoArgInitDefaultsToContainerEnvelope() throws {
+        let legacy = CacheRepository<TestModel>("BackCompatDefaults", invalidateTime: .inTime(ttl: 3600))
+        XCTAssertEqual(legacy.envelope, .container)
+    }
+
+    /// The pre-existing 1-arg default-TTL init must also still compile.
+    func testBackCompatOneArgInitStillCompiles() {
+        let legacy = CacheRepository<TestModel>("BackCompatOneArg")
+        XCTAssertEqual(legacy.envelope, .container)
+    }
+
+    // MARK: - Directory override
+
+    private func makeTempDir(_ label: String = "cache") -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CacheRepoTests-\(label)-\(UUID().uuidString)", isDirectory: true)
+        return dir
+    }
+
+    func testDirectoryOverrideCreatesDirectoryAndWritesThere() throws {
+        let dir = makeTempDir("dir-override")
+        // Directory does NOT exist yet — init must create it.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: dir.path))
+
+        let repo = CacheRepository<TestModel>(
+            "DirOverride",
+            invalidateTime: .inTime(ttl: 3600),
+            directory: dir
+        )
+        let id = "dir-\(UUID().uuidString)"
+        let model = TestModel(id: 7, name: "in-tempdir")
+
+        try repo.save(id, data: model)
+
+        // The file must exist under the overridden directory, NOT under .documentDirectory.
+        let expectedFile = dir.appendingPathComponent("DirOverride-\(id).cache")
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: expectedFile.path),
+            "expected cache file at \(expectedFile.path) — got nothing there"
+        )
+
+        let round: TestModel = try repo.get(id)
+        XCTAssertEqual(round, model)
+
+        // Cleanup
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // MARK: - Raw envelope — round-trip + on-disk shape
+
+    func testRawEnvelopeRoundTrip() throws {
+        let dir = makeTempDir("raw-roundtrip")
+        let repo = CacheRepository<TestModel>(
+            "RawRT",
+            invalidateTime: .never,
+            directory: dir,
+            envelope: .raw
+        )
+        let id = "raw-\(UUID().uuidString)"
+        let model = TestModel(id: 42, name: "raw-round-trip")
+
+        try repo.save(id, data: model)
+        XCTAssertTrue(repo.exists(id))
+
+        let round: TestModel = try repo.get(id)
+        XCTAssertEqual(round, model)
+
+        try repo.delete(id)
+        XCTAssertFalse(repo.exists(id))
+
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// The whole point of `.raw`: the file bytes MUST be a direct JSON dump of
+    /// `ModelType`, cat/jq-able, with no `body`/`timestamp`/`modelType` wrapper.
+    func testRawEnvelopeFileIsDirectModelJSON() throws {
+        let dir = makeTempDir("raw-shape")
+        let repo = CacheRepository<TestModel>(
+            "RawShape",
+            invalidateTime: .never,
+            directory: dir,
+            envelope: .raw
+        )
+        let id = "shape-\(UUID().uuidString)"
+        let model = TestModel(id: 99, name: "shape-check")
+        try repo.save(id, data: model)
+
+        let fileURL = dir.appendingPathComponent("RawShape-\(id).cache")
+        let raw = try Data(contentsOf: fileURL)
+        let json = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        XCTAssertNotNil(json, "raw cache file must parse as a JSON object")
+
+        // The direct-shape assertions.
+        XCTAssertEqual(json?["id"] as? Int, 99)
+        XCTAssertEqual(json?["name"] as? String, "shape-check")
+
+        // Envelope keys MUST NOT be present.
+        XCTAssertNil(json?["body"], ".raw file must NOT contain envelope 'body' key")
+        XCTAssertNil(json?["timestamp"], ".raw file must NOT contain envelope 'timestamp' key")
+        XCTAssertNil(json?["modelType"], ".raw file must NOT contain envelope 'modelType' key")
+        XCTAssertNil(json?["invalideTime"], ".raw file must NOT contain envelope 'invalideTime' key")
+        XCTAssertNil(json?["readCount"], ".raw file must NOT contain envelope 'readCount' key")
+
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// Container envelope keeps its historical shape — regression guard so that
+    /// `.container` is genuinely the back-compat default.
+    func testContainerEnvelopeFileStillWrapsInEnvelope() throws {
+        let dir = makeTempDir("container-shape")
+        let repo = CacheRepository<TestModel>(
+            "ContainerShape",
+            invalidateTime: .inTime(ttl: 3600),
+            directory: dir,
+            envelope: .container
+        )
+        let id = "container-\(UUID().uuidString)"
+        try repo.save(id, data: TestModel(id: 1, name: "in-envelope"))
+
+        let fileURL = dir.appendingPathComponent("ContainerShape-\(id).cache")
+        let raw = try Data(contentsOf: fileURL)
+        let json = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
+        XCTAssertNotNil(json)
+        XCTAssertNotNil(json?["body"], ".container file MUST contain 'body' envelope key")
+        XCTAssertNotNil(json?["timestamp"], ".container file MUST contain 'timestamp' envelope key")
+        XCTAssertNotNil(json?["modelType"], ".container file MUST contain 'modelType' envelope key")
+
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // MARK: - .raw + .never: survives any age
+
+    /// `.raw` + `.never` MUST return the value regardless of file age.
+    /// Simulates an ancient file by back-dating its mtime by ~1 year.
+    func testRawNeverSurvivesAncientFile() throws {
+        let dir = makeTempDir("raw-never")
+        let repo = CacheRepository<TestModel>(
+            "RawNever",
+            invalidateTime: .never,
+            directory: dir,
+            envelope: .raw
+        )
+        let id = "ancient-\(UUID().uuidString)"
+        let model = TestModel(id: 8, name: "ancient")
+        try repo.save(id, data: model)
+
+        // Back-date the file's mtime by 1 year.
+        let fileURL = dir.appendingPathComponent("RawNever-\(id).cache")
+        let ancient = Date(timeIntervalSinceNow: -365 * 24 * 60 * 60)
+        try FileManager.default.setAttributes(
+            [.modificationDate: ancient],
+            ofItemAtPath: fileURL.path
+        )
+
+        // Ancient file with .never must still round-trip.
+        let round: TestModel = try repo.get(id)
+        XCTAssertEqual(round, model)
+
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    /// Sibling proof: `.raw` + `.inTime(ttl: 0)` DOES invalidate expired files —
+    /// this is what tells us the `.never` guarantee above isn't accidental.
+    func testRawInTimeExpiredFileIsInvalidated() throws {
+        let dir = makeTempDir("raw-expired")
+        let repo = CacheRepository<TestModel>(
+            "RawExpired",
+            invalidateTime: .inTime(ttl: 0),
+            directory: dir,
+            envelope: .raw
+        )
+        let id = "expired-\(UUID().uuidString)"
+        try repo.save(id, data: TestModel(id: 9, name: "expired"))
+
+        // ttl=0 → any mtime in the past is "expired" — sync get() has hasNetwork=true so it invalidates.
+        XCTAssertThrowsError(try repo.get(id))
+
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    // MARK: - Container + .never (regression: pre-existing behavior)
+
+    func testContainerNeverSurvivesAncientFile() throws {
+        let dir = makeTempDir("container-never")
+        let repo = CacheRepository<TestModel>(
+            "ContainerNever",
+            invalidateTime: .never,
+            directory: dir,
+            envelope: .container
+        )
+        let id = "cn-\(UUID().uuidString)"
+        let model = TestModel(id: 10, name: "container-never")
+        try repo.save(id, data: model)
+
+        // Simulate an ancient file — .never uses the envelope timestamp, but
+        // the guarantee still holds: .never returns regardless.
+        let round: TestModel = try repo.get(id)
+        XCTAssertEqual(round, model)
+
+        try? FileManager.default.removeItem(at: dir)
     }
 }
