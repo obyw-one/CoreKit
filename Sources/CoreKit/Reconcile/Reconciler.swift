@@ -11,6 +11,15 @@ import Foundation
 
 /// Generic three-way reconcile over `Identifiable` elements.
 ///
+/// > ⚠️ **Preview / speculative surface** (shield D-1, 2026-07-28). As of this
+/// > commit there is **no verified consumer** — the four originally-cited
+/// > callers (`CacheRepository`, `SpecRebaser`, `SpecSyncEngine`, `kagami scopes
+/// > lint`) were confirmed NOT to perform three-way merges. This namespace is
+/// > extracted pre-emptively; its shape is unproven until a real consumer
+/// > (e.g. `FlowDeliverySteward` salvage / `kagami lint --diff`) migrates onto
+/// > it. Treat the public API as unstable until then — release should tag a
+/// > `-preview` version rather than a stable minor.
+///
 /// - `Element`: the domain type; identity comes from `Element.ID`.
 /// - `Key`: the change-detection token type returned by `contentKey`
 ///   (a version string, content hash, or `\.self` for value types).
@@ -34,6 +43,11 @@ where Element.ID: Comparable & Sendable {
     /// Classify every id across `base` / `mine` / `theirs`. Two-way diff is the
     /// degenerate call `reconcile(base: [], mine:, theirs:)`. Outcomes are stable-
     /// sorted by id, so a shuffled input yields a byte-identical result.
+    ///
+    /// - Precondition: each of `base` / `mine` / `theirs` is **unique by id**.
+    ///   Inputs are treated as sets; a duplicate id is dropped first-writer-wins
+    ///   (the second entry is silently discarded). DEBUG builds `assert` on
+    ///   duplicates so tests catch them (shield S-1, 2026-07-28).
     public func reconcile(base: [Element], mine: [Element], theirs: [Element]) -> [ReconcileOutcome<Element.ID>] {
         let idx = index(base: base, mine: mine, theirs: theirs)
         return idx.ids.map { id in
@@ -47,6 +61,14 @@ where Element.ID: Comparable & Sendable {
     /// never touched by policy. Returns the persistable `report`, the `merged`
     /// collection (stable-sorted by id), and the typed `refused` conflicts
     /// (non-empty only under `.refuseOnConflict`).
+    ///
+    /// - Precondition: `base` / `mine` / `theirs` are each unique-by-id (see
+    ///   `reconcile(base:mine:theirs:)`).
+    /// - Note: `merged` is NOT `decisions ⋈ merged`-joinable — a `preferMine`
+    ///   decision where *mine removed* the element yields a
+    ///   `decisions` entry (`.mine`) with **no** row in `merged`. Do not assume
+    ///   every non-refused decision has a `merged` counterpart (shield S-2,
+    ///   2026-07-28).
     public func resolve(
         base: [Element],
         mine: [Element],
@@ -105,8 +127,15 @@ where Element.ID: Comparable & Sendable {
     }
 
     private func dict(_ arr: [Element]) -> [Element.ID: Element] {
-        // First-writer-wins on duplicate ids — reconcile inputs are sets by contract.
-        Dictionary(arr.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Precondition: inputs are unique-by-id (see reconcile/resolve docs).
+        // Fail-loud in DEBUG so a duplicate-id caller is caught in tests instead
+        // of silently losing rows (shield S-1, 2026-07-28); release keeps the
+        // first-writer-wins fallback rather than trapping in production.
+        assert(
+            Set(arr.map(\.id)).count == arr.count,
+            "Reconciler inputs must be unique-by-id; duplicate ids are silently dropped (first-writer-wins)."
+        )
+        return Dictionary(arr.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// The total, orthogonal three-way classification. Every `(inBase, inMine, inTheirs)`

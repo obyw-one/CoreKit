@@ -14,14 +14,19 @@ import Foundation
 /// `custom` policy can resolve it. `base` is `nil` for both-added conflicts (the
 /// element did not exist in base); `mine`/`theirs` is `nil` for the removed side of
 /// a modify/remove conflict.
-public struct Conflict<Element: Identifiable & Sendable>: Sendable where Element.ID: Sendable {
+public struct Conflict<Element: Identifiable & Sendable>: Sendable where Element.ID: Hashable & Sendable {
     public let id: Element.ID
     public let outcome: ReconcileOutcome<Element.ID>
     public let base: Element?
     public let mine: Element?
     public let theirs: Element?
 
+    /// - Precondition: `id == outcome.id`. A `Conflict` whose `id` disagrees
+    ///   with its `outcome`'s id is a contract violation — the two must name
+    ///   the same element, or `custom` policy closures receive contradictory
+    ///   information. Enforced via `precondition` (shield D-2, 2026-07-28).
     public init(id: Element.ID, outcome: ReconcileOutcome<Element.ID>, base: Element?, mine: Element?, theirs: Element?) {
+        precondition(id == outcome.id, "Conflict.id (\(id)) must equal outcome.id (\(outcome.id))")
         self.id = id
         self.outcome = outcome
         self.base = base
