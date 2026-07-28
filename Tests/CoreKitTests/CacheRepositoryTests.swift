@@ -109,4 +109,39 @@ final class CacheRepositoryTests: XCTestCase {
         // Cleanup
         try? neverCache.delete(neverId)
     }
+
+    // MARK: - Base Directory (CLI / per-project cache)
+
+    func testCustomBaseDirectoryWritesThereNotDocuments() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corekit-basedir-\(UUID().uuidString)", isDirectory: true)
+        let scoped = CacheRepository<TestModel>(
+            "WsMeta", invalidateTime: .never, baseDirectory: tmp)
+        let model = TestModel(id: 42, name: "scoped")
+
+        try scoped.save("x", data: model)
+
+        // File landed under the custom base dir, not ~/Documents.
+        let expected = tmp.appendingPathComponent("WsMeta-x.cache")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: expected.path),
+                      "cache file must be written under the custom baseDirectory")
+        XCTAssertEqual(try scoped.get("x"), model)
+
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    func testCustomBaseDirectoryIsCreatedIfMissing() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corekit-mkdir-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("nested", isDirectory: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tmp.path))
+        let scoped = CacheRepository<TestModel>("N", baseDirectory: tmp)
+
+        try scoped.save("y", data: TestModel(id: 1, name: "a"))
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmp.path),
+                      "save must create intermediate base directories")
+        try? FileManager.default.removeItem(at: tmp.deletingLastPathComponent())
+    }
+
 }
