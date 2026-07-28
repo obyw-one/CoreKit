@@ -1,3 +1,20 @@
 .build/
 .swiftpm/
 build/
+
+# kagami SQLite scratch — history/shard DBs are local test state, never committed
+# (only .kagami/scopes*.toml is tracked config)
+.kagami/history.db
+.kagami/history.db-shm
+.kagami/history.db-wal
+.kagami/history.db.write-lock
+.kagami/tmp/
+
+# graphify skill output dump — generated, not source
+graphify-out/
+
+# shield / gate run reports — local run artefacts
+reports/
+
+# moto architecture cache dir (the .moto marker itself IS tracked; the cache dir is not)
+.moto-cache/
