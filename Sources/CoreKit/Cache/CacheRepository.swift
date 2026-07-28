@@ -112,15 +112,34 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     /// Name of the file where cached data is saved.
     public let name: String
 
-    /// Document directory path for cache storage.
-    private let documentPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+    /// Base directory for cache storage.
+    ///
+    /// Defaults to the user's Documents directory (app-cache use case). CLI
+    /// tools and per-project caches (e.g. `shi-moto`'s `.moto-cache/`) pass an
+    /// explicit `baseDirectory` so the cache lives alongside the project
+    /// instead of in `~/Documents`. The directory is created on first `save`
+    /// if it does not yet exist.
+    private let baseDirectory: URL
 
     /// Time-to-live policy for cache invalidation.
     private(set) var invalidateTime: InvalidateTime
 
-    public init(_ name: String, invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60)) {
+    /// - Parameters:
+    ///   - name: Namespace prefix for the on-disk filename.
+    ///   - invalidateTime: TTL policy (default: 7 days).
+    ///   - baseDirectory: Directory to store cache files in. Defaults to the
+    ///     user's Documents directory for back-compatibility with the
+    ///     app-cache use case. Pass a project-relative directory (e.g.
+    ///     `.moto-cache/`) for CLI / per-project caches.
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        baseDirectory: URL? = nil
+    ) {
         self.name = name
         self.invalidateTime = invalidateTime
+        self.baseDirectory = baseDirectory
+            ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
     }
 
     nonisolated public func exists(_ id: String) -> Bool {
@@ -203,6 +222,13 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         let fileUrl = self.fileUrl(id)
 
         do {
+            // Ensure the base directory exists (custom base dirs — e.g. a
+            // project-relative `.moto-cache/` — may not exist on first save;
+            // the Documents directory always does, so this is a no-op there).
+            try FileManager.default.createDirectory(
+                at: baseDirectory,
+                withIntermediateDirectories: true
+            )
             let container = try CacheContainerModel(data: data, invalideTime: invalidateTime)
             let toData = try JSONEncoder().encode(container)
             try toData.write(to: fileUrl, options: .atomic)
@@ -266,7 +292,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
 
     nonisolated private func fileUrl(_ id: String) -> URL {
         let filename = name + "-" + id + ".cache"
-        let fileUrl = documentPath.appendingPathComponent(filename)
+        let fileUrl = baseDirectory.appendingPathComponent(filename)
         return fileUrl
     }
 }
