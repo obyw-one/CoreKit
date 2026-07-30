@@ -243,7 +243,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     ///     pre-existing `.first!` force-unwrap so sandboxed / non-app
     ///     environments where `.documentDirectory` returns an empty array
     ///     no longer crash)
-    private let documentPath: URL
+    private let baseDirectory: URL
 
     /// Time-to-live policy for cache invalidation.
     private(set) var invalidateTime: InvalidateTime
@@ -263,7 +263,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     ///   - name: filename stem — every entry is written as `"<name>-<id>.cache"`.
     ///   - invalidateTime: TTL policy. Default is `.inTime(ttl: 7 days)`.
     ///     See `InvalidateTime` for per-case guidance.
-    ///   - directory: destination directory for cache files. `nil` (default)
+    ///   - baseDirectory: destination directory for cache files. `nil` (default)
     ///     keeps the historical behavior (`.documentDirectory`, with a
     ///     `temporaryDirectory` safe fallback if unavailable). A non-nil URL
     ///     stores files under that directory and creates it if missing —
@@ -284,7 +284,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     public init(
         _ name: String,
         invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
-        directory: URL? = nil,
+        baseDirectory: URL? = nil,
         envelope: EnvelopeMode = .container,
         naming: FileNaming = .legacy,
         codec: CacheCodec = .default
@@ -297,15 +297,15 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
 
         // Resolve storage directory with a safe fallback chain — no more `.first!`.
         let resolved: URL
-        if let directory {
-            resolved = directory
+        if let baseDirectory {
+            resolved = baseDirectory
         } else if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
             resolved = docs
         } else {
             resolved = FileManager.default.temporaryDirectory
             AppLog.cache.warning("CacheRepository: .documentDirectory unavailable — falling back to temporaryDirectory at \(resolved.path)")
         }
-        self.documentPath = resolved
+        self.baseDirectory = resolved
 
         // Best-effort mkdir -p. If this fails, subsequent `save` writes will
         // surface the underlying FileManager error via `encodedError`.
@@ -522,6 +522,6 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         case .custom(let derive):
             filename = derive(name, id)
         }
-        return documentPath.appendingPathComponent(filename)
+        return baseDirectory.appendingPathComponent(filename)
     }
 }

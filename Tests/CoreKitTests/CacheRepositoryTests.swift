@@ -142,7 +142,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "DirOverride",
             invalidateTime: .inTime(ttl: 3600),
-            directory: dir
+            baseDirectory: dir
         )
         let id = "dir-\(UUID().uuidString)"
         let model = TestModel(id: 7, name: "in-tempdir")
@@ -170,7 +170,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "RawRT",
             invalidateTime: .never,
-            directory: dir,
+            baseDirectory: dir,
             envelope: .raw
         )
         let id = "raw-\(UUID().uuidString)"
@@ -195,7 +195,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "RawShape",
             invalidateTime: .never,
-            directory: dir,
+            baseDirectory: dir,
             envelope: .raw
         )
         let id = "shape-\(UUID().uuidString)"
@@ -228,7 +228,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "ContainerShape",
             invalidateTime: .inTime(ttl: 3600),
-            directory: dir,
+            baseDirectory: dir,
             envelope: .container
         )
         let id = "container-\(UUID().uuidString)"
@@ -254,7 +254,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "RawNever",
             invalidateTime: .never,
-            directory: dir,
+            baseDirectory: dir,
             envelope: .raw
         )
         let id = "ancient-\(UUID().uuidString)"
@@ -283,7 +283,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "RawExpired",
             invalidateTime: .inTime(ttl: 0),
-            directory: dir,
+            baseDirectory: dir,
             envelope: .raw
         )
         let id = "expired-\(UUID().uuidString)"
@@ -302,7 +302,7 @@ final class CacheRepositoryTests: XCTestCase {
         let repo = CacheRepository<TestModel>(
             "ContainerNever",
             invalidateTime: .never,
-            directory: dir,
+            baseDirectory: dir,
             envelope: .container
         )
         let id = "cn-\(UUID().uuidString)"
@@ -316,4 +316,36 @@ final class CacheRepositoryTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: dir)
     }
+
+    func testCustomBaseDirectoryWritesThereNotDocuments() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corekit-basedir-\(UUID().uuidString)", isDirectory: true)
+        let scoped = CacheRepository<TestModel>(
+            "WsMeta", invalidateTime: .never, baseDirectory: tmp)
+        let model = TestModel(id: 42, name: "scoped")
+
+        try scoped.save("x", data: model)
+
+        // File landed under the custom base dir, not ~/Documents.
+        let expected = tmp.appendingPathComponent("WsMeta-x.cache")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: expected.path),
+                      "cache file must be written under the custom baseDirectory")
+        XCTAssertEqual(try scoped.get("x"), model)
+
+        try? FileManager.default.removeItem(at: tmp)
+    }
+    func testCustomBaseDirectoryIsCreatedIfMissing() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("corekit-mkdir-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("nested", isDirectory: true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tmp.path))
+        let scoped = CacheRepository<TestModel>("N", baseDirectory: tmp)
+
+        try scoped.save("y", data: TestModel(id: 1, name: "a"))
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tmp.path),
+                      "save must create intermediate base directories")
+        try? FileManager.default.removeItem(at: tmp.deletingLastPathComponent())
+    }
+
 }
