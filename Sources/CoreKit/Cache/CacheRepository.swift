@@ -337,7 +337,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         let fm = FileManager.default
         let prefix = name + "-"
         let entries = (try? fm.contentsOfDirectory(
-            at: documentPath,
+            at: baseDirectory,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         )) ?? []
