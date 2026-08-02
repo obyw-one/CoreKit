@@ -10,9 +10,15 @@ import os
 
 // MARK: - Protocol
 
-public protocol CacheRepositoryProtocol {
-    associatedtype ModelType: Codable
-
+/// Cache-flavoured refinement of ``RepositoryProtocol``: keys are `String`,
+/// and the surface adds the cache-specific extras (`exists`, the
+/// reachability-aware `get`). The base protocol contributes `list()` and the
+/// async spellings — existing synchronous conformers satisfy those without
+/// change, since a sync method fulfils an async requirement.
+///
+/// Note (0.5.0): `ModelType` gains `Sendable` alongside `Codable`, inherited
+/// from the base protocol. `CacheRepository` always required it.
+public protocol CacheRepositoryProtocol: RepositoryProtocol where ID == String {
     func exists(_ id: String) -> Bool
     func get(_ id: String) throws -> ModelType
     func get(_ id: String, checkNetworkReachability: Bool) async throws -> ModelType
@@ -126,6 +132,31 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     nonisolated public func exists(_ id: String) -> Bool {
         let fileUrl = self.fileUrl(id)
         return FileManager.default.fileExists(atPath: fileUrl.relativePath)
+    }
+
+    /// Enumerate every record this cache holds (``RepositoryProtocol/list()``).
+    /// Scans the document directory for this cache's `<name>-<id>.cache`
+    /// files and decodes each container; entries that fail to decode or have
+    /// expired are skipped rather than failing the whole enumeration.
+    nonisolated public func list() throws -> [ModelType] {
+        let fm = FileManager.default
+        let prefix = name + "-"
+        let entries = (try? fm.contentsOfDirectory(
+            at: documentPath,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []
+        var out: [ModelType] = []
+        for url in entries {
+            let filename = url.lastPathComponent
+            guard filename.hasPrefix(prefix), filename.hasSuffix(".cache") else { continue }
+            guard let data = try? Data(contentsOf: url) else { continue }
+            guard var container = try? JSONDecoder()
+                .decode(CacheContainerModel<ModelType>.self, from: data) else { continue }
+            guard (try? cacheIsValid(&container, hasNetwork: true)) == true else { continue }
+            if let model = try? container.decoded() { out.append(model) }
+        }
+        return out
     }
 
     nonisolated public func get(_ id: String) throws -> ModelType {
