@@ -69,4 +69,24 @@ struct ContentHashTests {
             )
         }
     }
+
+    @Test("Incremental fold over split input equals one-shot digest")
+    func incrementalEqualsOneShot() {
+        let payload = "shikki incremental fold"
+        var hasher = ContentHash.Incremental()
+        // Split at an arbitrary boundary — fold must be chunking-invariant.
+        hasher.update(Data(payload.prefix(7).utf8))
+        hasher.update(String(payload.dropFirst(7)))
+        #expect(hasher.finalizeHex() == ContentHash.sha256(payload))
+    }
+
+    @Test("Incremental with a single empty update matches the empty digest")
+    func incrementalEmpty() {
+        var hasher = ContentHash.Incremental()
+        hasher.update(Data())
+        #expect(
+            hasher.finalizeHex()
+                == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
+    }
 }
