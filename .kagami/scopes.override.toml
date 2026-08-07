@@ -10,3 +10,14 @@ test_file_patterns = ["**/CoreKitTests/*.swift"]
 timeout = 300
 expected_test_min = 20
 description = "CoreKit cache + container + resolve suites. Run: kagami test --scope CoreKitCache"
+
+[[scopes]]
+# DrainLoop primitive — Draining protocol + engine (extracted 2026-08-07,
+# challenge 1f2d74f7). Fake-clock determinism is the load-bearing contract.
+name = "CoreKitDrain"
+test_target_name = "CoreKitTests"
+type_patterns = ["DrainLoopTests"]
+test_file_patterns = ["**/CoreKitTests/Drain/**.swift"]
+expected_test_min = 10
+timeout = 600
+description = "Draining + DrainLoop: tick/backoff via FakeDrainClock, quarantine-to-report, in-run idempotency. Run: kagami test --scope CoreKitDrain"
