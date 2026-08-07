@@ -21,3 +21,13 @@ test_file_patterns = ["**/CoreKitTests/Drain/**.swift"]
 expected_test_min = 10
 timeout = 600
 description = "Draining + DrainLoop: tick/backoff via FakeDrainClock, quarantine-to-report, in-run idempotency. Run: kagami test --scope CoreKitDrain"
+
+[[scopes]]
+# ContentHash — fleet SHA-256 SSoT (shi-qa rev-2 W1, swift-crypto backed).
+name = "CoreKitHash"
+test_target_name = "CoreKitTests"
+type_patterns = ["ContentHashTests"]
+test_file_patterns = ["**/CoreKitTests/Utilities/ContentHashTests.swift"]
+expected_test_min = 6
+timeout = 600
+description = "ContentHash: SHA-256 vectors, format contract, streaming parity. Run: kagami test --scope CoreKitHash"
