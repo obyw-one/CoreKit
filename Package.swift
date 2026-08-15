@@ -14,9 +14,19 @@ let package = Package(
             targets: ["CoreKit"]
         ),
     ],
+    dependencies: [
+        // swift-crypto — Apple's cross-platform crypto (re-exports CryptoKit
+        // impls on Darwin, pure-Swift on Linux). ONE fleet dep for hashing,
+        // per [[spm-primitive-reuse-is-mandatory-not-a-question]]: plugins
+        // consume CoreKit.ContentHash, never CryptoKit directly.
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+    ],
     targets: [
         .target(
-            name: "CoreKit"
+            name: "CoreKit",
+            dependencies: [
+                .product(name: "Crypto", package: "swift-crypto"),
+            ]
         ),
         .testTarget(
             name: "CoreKitTests",
