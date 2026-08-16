@@ -31,3 +31,19 @@ test_file_patterns = ["**/CoreKitTests/Utilities/ContentHashTests.swift"]
 expected_test_min = 6
 timeout = 600
 description = "ContentHash: SHA-256 vectors, format contract, streaming parity. Run: kagami test --scope CoreKitHash"
+
+[[scopes]]
+# DeviceCapacity prober — parent-spec 4b8e21c9 W1 (2026-08-16). One
+# honest cross-platform snapshot of what a device can spend on a model.
+# The ratchet test (T-CP-06) is load-bearing: it enforces that raw
+# capacity syscalls stay confined to PlatformCapacityProber.swift.
+name = "CoreKitCapacity"
+test_target_name = "CoreKitTests"
+type_patterns = ["DeviceCapacitySnapshotTests", "PlatformCapacityProberTests"]
+test_file_patterns = ["**/CoreKitTests/Capacity/**.swift"]
+# 7 tests: T-CP-01/02/03/05/06 in the snapshot suite,
+# T-CP-04/07 in the platform-prober suite.
+expected_test_min = 7
+timeout = 300
+description = "DeviceCapacity: snapshot round-trip, seam ratchet, platform basis, live macOS invariants. Run: kagami test --scope CoreKitCapacity"
+

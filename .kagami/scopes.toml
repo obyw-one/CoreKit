@@ -1,16 +1,16 @@
-generated_at = "2026-07-28T09:37:40Z"
+generated_at = "2026-08-16T09:02:40Z"
 generated_by = "kagami auto-discover --write-cache"
-source_mtime_iso = "2026-06-20T02:37:15Z"
-source_sha = "e5eda47"
+source_mtime_iso = "2026-08-16T08:54:47Z"
+source_sha = "75102d4"
 
 [[scopes]]
 discovered_via = "swift-package-ast"
 language = "swift"
 module_patterns = ["CoreKitTests"]
 name = "CoreKitTests"
-package_path = "/Users/jeoffrey/.shikki/workspaces/personal/packages/CoreKit"
+package_path = "."
 source_paths = ["Tests/CoreKitTests/"]
 test_command = ["swift", "test", "--filter", "CoreKitTests"]
-test_file_patterns = []
+test_file_patterns = ["**/CacheNamingCodecTests.swift", "**/CacheRepositoryTests.swift", "**/ContainerTests.swift", "**/ContentHashTests.swift", "**/DeviceCapacitySnapshotTests.swift", "**/DrainLoopTests.swift", "**/InMemoryRepositoryTests.swift", "**/OrderedQueueTests.swift", "**/PlatformCapacityProberTests.swift", "**/ReconcilerTests.swift", "**/ResolveTests.swift"]
 test_target_name = "CoreKitTests"
-type_patterns = []
+type_patterns = ["CacheNamingCodecTests", "CacheRepositoryTests", "ContainerTests", "ContentHashTests", "DeviceCapacitySnapshotTests", "DrainLoopTests", "InMemoryRepositoryTests", "OrderedQueueTests", "PlatformCapacityProberTests", "ReconcilerTests", "ResolveTests"]
