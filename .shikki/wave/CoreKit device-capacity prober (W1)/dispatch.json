@@ -1,0 +1,13 @@
+{
+  "base": {
+    "branch": "develop",
+    "fresh": true,
+    "sha": "75102d488ac8219d22ae2b37ce83d76497563010"
+  },
+  "base_source": "frontmatter",
+  "base_stale": false,
+  "feature": "CoreKit device-capacity prober (W1)",
+  "schema": "shikki.dispatch\/1",
+  "spec_path": "\/Users\/jeoffrey\/.shikki\/tmp\/specs\/corekit-device-capacity-prober-w1-2026-08-16.md",
+  "written_at": "2026-08-16T08:54:47Z"
+}

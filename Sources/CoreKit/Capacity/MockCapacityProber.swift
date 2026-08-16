@@ -14,34 +14,34 @@ import Foundation
 /// demonstrate that `availableNow` moves while `totalRAM` does not.
 public final class MockCapacityProber: DeviceCapacityProbing, @unchecked Sendable {
 
-    private let lock = NSLock()
-    private var _snapshot: DeviceCapacitySnapshot
-    private var _probeCount: Int = 0
+  private let lock = NSLock()
+  private var _snapshot: DeviceCapacitySnapshot
+  private var _probeCount: Int = 0
 
-    public init(_ snapshot: DeviceCapacitySnapshot) {
-        self._snapshot = snapshot
+  public init(_ snapshot: DeviceCapacitySnapshot) {
+    self._snapshot = snapshot
+  }
+
+  // MARK: - DeviceCapacityProbing
+
+  public func probe() -> DeviceCapacitySnapshot {
+    lock.withLock {
+      _probeCount += 1
+      return _snapshot
     }
+  }
 
-    // MARK: - DeviceCapacityProbing
+  // MARK: - Test controls
 
-    public func probe() -> DeviceCapacitySnapshot {
-        lock.withLock {
-            _probeCount += 1
-            return _snapshot
-        }
-    }
+  /// Replace the snapshot the next `probe()` will return. Tests use
+  /// this to model a device that got busier between reads.
+  public func setSnapshot(_ snapshot: DeviceCapacitySnapshot) {
+    lock.withLock { _snapshot = snapshot }
+  }
 
-    // MARK: - Test controls
-
-    /// Replace the snapshot the next `probe()` will return. Tests use
-    /// this to model a device that got busier between reads.
-    public func setSnapshot(_ snapshot: DeviceCapacitySnapshot) {
-        lock.withLock { _snapshot = snapshot }
-    }
-
-    /// Total `probe()` calls served so far — for assertions that a
-    /// consumer read the seam exactly once (or exactly N times).
-    public var probeCount: Int {
-        lock.withLock { _probeCount }
-    }
+  /// Total `probe()` calls served so far — for assertions that a
+  /// consumer read the seam exactly once (or exactly N times).
+  public var probeCount: Int {
+    lock.withLock { _probeCount }
+  }
 }
