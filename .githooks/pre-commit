@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# pre-commit hook — auto-fix then verify Swift formatting and linting.
+# Install: git config core.hooksPath .githooks
+#
+# Requires: swiftformat (brew install swiftformat), swiftlint (brew install swiftlint)
+# Fleet template: https://github.com/shikki-io/swift-lint-fleet-template
+
+set -euo pipefail
+
+BOLD="\033[1m"
+RED="\033[31m"
+YELLOW="\033[33m"
+GREEN="\033[32m"
+RESET="\033[0m"
+
+check_tool() {
+    if ! command -v "$1" &>/dev/null; then
+        echo -e "${RED}${BOLD}ERROR:${RESET} '$1' not found. Install with: brew install $1"
+        echo "       Or skip this hook once with: git commit --no-verify"
+        exit 1
+    fi
+}
+
+check_tool swiftformat
+check_tool swiftlint
+
+# ── Step 1: auto-fix with SwiftFormat ────────────────────────────────────────
+echo -e "${YELLOW}[pre-commit]${RESET} Running swiftformat auto-fix..."
+if ! swiftformat . --quiet 2>&1; then
+    echo -e "${RED}${BOLD}[pre-commit] swiftformat failed.${RESET}"
+    echo "  Fix the errors above, then re-stage and re-commit."
+    exit 1
+fi
+
+# Re-add any files that swiftformat modified so they're included in the commit.
+# Only re-stage files that were already staged (partially or fully).
+STAGED=$(git diff --name-only --cached --diff-filter=ACMR | grep '\.swift$' || true)
+if [ -n "$STAGED" ]; then
+    echo "$STAGED" | xargs git add
+fi
+
+# ── Step 2: auto-fix with SwiftLint ──────────────────────────────────────────
+echo -e "${YELLOW}[pre-commit]${RESET} Running swiftlint --fix..."
+if ! swiftlint --fix --quiet 2>&1; then
+    # swiftlint --fix exits nonzero only on unfixable violations in --strict mode.
+    # We don't pass --strict here; we run strict verification in pre-push instead.
+    echo -e "${YELLOW}[pre-commit]${RESET} swiftlint auto-fix had warnings; verifying..."
+fi
+
+# Re-stage any swiftlint-fixed Swift files.
+if [ -n "$STAGED" ]; then
+    echo "$STAGED" | xargs git add
+fi
+
+# ── Step 3: verify no remaining violations ────────────────────────────────────
+echo -e "${YELLOW}[pre-commit]${RESET} Verifying swiftlint (remaining violations = commit blocker)..."
+LINT_OUT=$(swiftlint --quiet 2>&1 || true)
+if [ -n "$LINT_OUT" ]; then
+    echo -e "${RED}${BOLD}[pre-commit] SwiftLint violations remain after auto-fix:${RESET}"
+    echo "$LINT_OUT"
+    echo ""
+    echo -e "  Fix the violations above, re-stage, and re-commit."
+    echo -e "  To skip this check once: ${BOLD}git commit --no-verify${RESET}"
+    exit 1
+fi
+
+echo -e "${GREEN}[pre-commit] Swift format + lint: clean.${RESET}"

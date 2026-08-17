@@ -1,0 +1,56 @@
+# SwiftLint configuration — fleet baseline
+# Ported from shikki main config (2026-08-17).
+# Minimal config: disable rules that conflict with swift-format or project style.
+
+disabled_rules:
+  # Conflicts with swift-format indentation choices
+  - trailing_whitespace
+  - leading_whitespace
+  # swift-format handles line length
+  - line_length
+  # Allow force_cast in test code and CLI internals
+  - force_cast
+  - force_try
+  # swift-format handles opening brace placement
+  - opening_brace
+  # We use // MARK: - consistently
+  - mark
+  # Allow large files in codegen modules
+  - file_length
+  # Allow many cases in enums
+  - type_body_length
+  - function_body_length
+  # Identifier length is too noisy for descriptive Swift naming
+  - identifier_name
+
+# Trailing comma canon: must stay in lockstep with .swiftformat --commas always.
+# Without mandatory_comma: true, swiftlint STRIPS the trailing commas that
+# swiftformat mandates, creating a perpetual flip-flop.
+trailing_comma:
+  mandatory_comma: true
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - contains_over_filter_count
+  - contains_over_first_not_nil
+  - discouraged_object_literal
+  - empty_string
+  - first_where
+  - last_where
+  - modifier_order
+  - overridden_super_call
+  - reduce_into
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - yoda_condition
+
+included:
+  - Sources
+  - Tests
+
+excluded:
+  - .build
+  - Package.swift
+
+reporter: "xcode"

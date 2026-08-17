@@ -1,0 +1,61 @@
+# SwiftFormat configuration — fleet baseline
+# Tool: https://github.com/nicklockwood/SwiftFormat (v0.62+)
+#
+# House-style rules (operator-ratified 2026-08-17):
+#  • Trailing commas always (syncs with .swiftlint.yml trailing_comma: mandatory_comma: true)
+#  • Single-line @Option/@Flag/@Argument — NEVER expand to multi-line
+#    (PR #1550, PR #1572 review 3792839879; see memory feedback_swift-format-oneliner-annotations)
+#  • 4-space indentation, 120-char soft line limit (generous: prefer --maxwidth 160 to avoid
+#    forcing wraps on @Option help strings)
+
+--swiftversion 5.9
+
+# Indentation
+--indent 4
+--tabwidth 4
+--indentcase false
+
+# Line length — generous limit avoids collapsing @Option(help: "long string") to multi-line
+--maxwidth 160
+
+# Argument wrapping — PRESERVE existing single-line form; do not auto-expand
+# This is the key rule that keeps @Option/@Flag/@Argument on one line.
+--wraparguments preserve
+--wrapparameters preserve
+--wrapcollections preserve
+--wrapreturntype preserve
+--wrapconditions preserve
+
+# Commas
+--commas always
+
+# Semicolons
+--semicolons never
+
+# Imports
+--importgrouping testable-bottom
+
+# Blank lines
+--emptybraces no-space
+--linebreaks lf
+--trimwhitespace always
+
+# Braces
+--allman false
+--elseposition same-line
+--guardelse same-line
+
+# Self
+--self remove
+--selfrequired []
+
+# Closures
+--trailingclosures all
+--nospaceoperators ..., ..<
+
+# Types
+--shortoptionals always
+
+# Rules to disable (handled by swift-format or project style)
+--disable redundantSelf,trailingCommas,todos
+--enable blankLinesBetweenScopes,consecutiveBlankLines,emptyBraces,redundantGet,redundantInit,sortImports,trailingSpace,wrapAttributes

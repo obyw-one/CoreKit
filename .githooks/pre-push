@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# pre-push hook — strict verification that no lint violations slip through to remote.
+# This is the final gate: pre-commit auto-fixes; pre-push re-verifies.
+# Install: git config core.hooksPath .githooks
+#
+# Requires: swiftformat (brew install swiftformat), swiftlint (brew install swiftlint)
+# Fleet template: https://github.com/shikki-io/swift-lint-fleet-template
+
+set -euo pipefail
+
+BOLD="\033[1m"
+RED="\033[31m"
+YELLOW="\033[33m"
+GREEN="\033[32m"
+RESET="\033[0m"
+
+check_tool() {
+    if ! command -v "$1" &>/dev/null; then
+        echo -e "${RED}${BOLD}ERROR:${RESET} '$1' not found. Install with: brew install $1"
+        echo "       Or skip this hook once with: git push --no-verify"
+        exit 1
+    fi
+}
+
+check_tool swiftformat
+check_tool swiftlint
+
+FAILED=0
+
+# ── Verify SwiftFormat ────────────────────────────────────────────────────────
+echo -e "${YELLOW}[pre-push]${RESET} Verifying swiftformat (lint mode, no changes)..."
+FORMAT_OUT=$(swiftformat . --lint --quiet 2>&1 || true)
+if [ -n "$FORMAT_OUT" ]; then
+    echo -e "${RED}${BOLD}[pre-push] SwiftFormat violations detected:${RESET}"
+    echo "$FORMAT_OUT"
+    FAILED=1
+fi
+
+# ── Verify SwiftLint (strict) ─────────────────────────────────────────────────
+echo -e "${YELLOW}[pre-push]${RESET} Verifying swiftlint --strict..."
+LINT_OUT=$(swiftlint --strict --quiet 2>&1 || true)
+if [ -n "$LINT_OUT" ]; then
+    echo -e "${RED}${BOLD}[pre-push] SwiftLint strict violations:${RESET}"
+    echo "$LINT_OUT"
+    FAILED=1
+fi
+
+if [ "$FAILED" -eq 1 ]; then
+    echo ""
+    echo -e "${RED}${BOLD}[pre-push] Push blocked — fix violations above and re-commit.${RESET}"
+    echo -e "  Run locally: swiftformat . && swiftlint --fix --quiet"
+    echo -e "  To skip this check once (NOT recommended): ${BOLD}git push --no-verify${RESET}"
+    exit 1
+fi
+
+echo -e "${GREEN}[pre-push] Swift format + lint: clean. Allowing push.${RESET}"
