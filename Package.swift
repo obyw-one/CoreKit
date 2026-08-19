@@ -7,6 +7,19 @@ let package = Package(
     platforms: [
         .iOS(.v17),
         .macOS(.v14),
+        // tvOS was never declared. An undeclared platform builds at SwiftPM's
+        // oldest supported version for it, so `AnimatedTabView` — which uses the
+        // tvOS-18-only Tab DSL (`Tab`, `TabContent`, `TabContentBuilder`) behind
+        // an `@available(iOS 18.0, *)` whose `*` fallback means "any" on tvOS —
+        // failed to compile for every tvOS consumer.
+        //
+        // A consuming app CANNOT fix this: SwiftPM builds a dependency at the
+        // dependency's own floor, not the app's. BrainyTube set tvOS 18.0 in
+        // both project.yml and Package.swift and still failed, because the floor
+        // that matters is this one.
+        //
+        // Apple TV 4K 3rd gen ships tvOS 26+, so 18.0 costs no reachability.
+        .tvOS(.v18),
     ],
     products: [
         .library(
