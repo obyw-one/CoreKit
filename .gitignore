@@ -24,3 +24,6 @@ reports/
 
 # moto architecture cache dir (the .moto marker itself IS tracked; the cache dir is not)
 .moto-cache/
+
+# per-package test scratch (CoreKitTestSupport.TestScratch) — run-namespaced, never committed
+.tests/
