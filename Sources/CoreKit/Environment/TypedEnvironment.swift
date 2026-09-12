@@ -75,6 +75,11 @@ public struct TypedEnvironment: Sendable, Equatable {
         storage.count
     }
 
+    /// `true` when the snapshot holds no variables at all.
+    public var isEmpty: Bool {
+        storage.isEmpty
+    }
+
     // MARK: - Private
 
     private static let truthy: Set<String> = ["1", "true", "yes", "on"]
