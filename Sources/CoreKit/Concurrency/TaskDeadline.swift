@@ -12,13 +12,13 @@ public enum TaskDeadlineError: Error, Equatable, Sendable {
 
 /// The fleet's one deadline and sleep primitive.
 ///
-/// `Task.sleep(for:tolerance:clock:)` aborts the Swift 6 runtime
+/// The clock-based sleep API aborts the Swift 6 runtime
 /// (`swift_task_dealloc: freed pointer was not the last allocation`)
 /// when the sleeper is cancelled from inside a task group under
 /// load; the safe shape is `Task.sleep(nanoseconds:)`. Every kit in
 /// the fleet stands on this primitive so no consumer has to
 /// re-discover that rule — the accompanying `CoreKitTestSupport`
-/// ratchet asserts the shape stays gone.
+/// ratchet asserts the banned shape stays gone.
 public enum TaskDeadline {
     /// Race `body` against a `duration`. Returns the body's value if
     /// it finishes first; throws `TaskDeadlineError.timedOut` if the
