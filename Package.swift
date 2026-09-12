@@ -13,6 +13,13 @@ let package = Package(
             name: "CoreKit",
             targets: ["CoreKit"]
         ),
+        // Test-only helpers every consumer's ratchet stands on
+        // (BR-CKT-03). Split product so app targets can depend on
+        // `CoreKit` without pulling test scaffolding.
+        .library(
+            name: "CoreKitTestSupport",
+            targets: ["CoreKitTestSupport"]
+        ),
     ],
     dependencies: [
         // swift-crypto — Apple's cross-platform crypto (re-exports CryptoKit
@@ -28,9 +35,12 @@ let package = Package(
                 .product(name: "Crypto", package: "swift-crypto"),
             ]
         ),
+        .target(
+            name: "CoreKitTestSupport"
+        ),
         .testTarget(
             name: "CoreKitTests",
-            dependencies: ["CoreKit"]
+            dependencies: ["CoreKit", "CoreKitTestSupport"]
         ),
     ]
 )

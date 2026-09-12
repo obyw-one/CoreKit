@@ -22,10 +22,12 @@ public protocol DrainClock: Sendable {
 public struct LiveDrainClock: DrainClock {
     public init() {}
 
-    public func now() -> Date { Date() }
+    public func now() -> Date {
+        Date()
+    }
 
     public func sleep(for seconds: TimeInterval) async throws {
-        try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+        try await TaskDeadline.sleep(TaskDeadline.duration(seconds: seconds))
     }
 }
 
