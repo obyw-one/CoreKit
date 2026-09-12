@@ -11,12 +11,9 @@ import Testing
 struct CoreKitSleepRatchetTests {
     @Test("no clock-based Task.sleep(for:) remains anywhere under Sources/CoreKit")
     func noClockBasedSleepInCoreKitSources() {
-        let sources = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent() // Concurrency
-            .deletingLastPathComponent() // CoreKitTests
-            .deletingLastPathComponent() // Tests
-            .deletingLastPathComponent() // package root
-            .appendingPathComponent("Sources/CoreKit", isDirectory: true)
+        // The package under test through the test-paths SSoT (nearest
+        // `Package.swift`), never a counted number of parent components.
+        let sources = TestPackagePaths.sourcesRoot(ofModule: "CoreKit")
 
         let hits = TaskDeadlineRatchet.clockBasedSleeps(in: sources)
 
