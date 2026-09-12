@@ -1,8 +1,7 @@
-@testable import CoreKit
 import XCTest
+@testable import CoreKit
 
 final class ContainerTests: XCTestCase {
-
     var container: Container!
 
     override func setUp() {
@@ -107,7 +106,7 @@ final class ContainerTests: XCTestCase {
 
     // MARK: - Thread Safety
 
-    func testConcurrentResolvesDoNotFalsePositiveCircular() throws {
+    func testConcurrentResolvesDoNotFalsePositiveCircular() {
         // Register two independent types
         container.register(String.self) { _ in
             Thread.sleep(forTimeInterval: 0.01) // simulate work
@@ -128,15 +127,13 @@ final class ContainerTests: XCTestCase {
         group.enter()
         DispatchQueue.global().async {
             defer { group.leave() }
-            do { stringResult = try self.container.resolve(String.self) }
-            catch { stringError = error }
+            do { stringResult = try self.container.resolve(String.self) } catch { stringError = error }
         }
 
         group.enter()
         DispatchQueue.global().async {
             defer { group.leave() }
-            do { intResult = try self.container.resolve(Int.self) }
-            catch { intError = error }
+            do { intResult = try self.container.resolve(Int.self) } catch { intError = error }
         }
 
         group.wait()
@@ -215,7 +212,7 @@ final class ContainerTests: XCTestCase {
         XCTAssertFalse(container.isRegistered(String.self))
     }
 
-    func testRemoveSpecificRegistration() throws {
+    func testRemoveSpecificRegistration() {
         container.register(String.self) { _ in "test" }
         container.register(Int.self) { _ in 42 }
 

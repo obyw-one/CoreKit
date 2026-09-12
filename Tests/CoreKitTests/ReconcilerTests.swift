@@ -1,5 +1,5 @@
-@testable import CoreKit
 import XCTest
+@testable import CoreKit
 
 // MARK: - Fixtures
 
@@ -8,7 +8,9 @@ private struct Row: Identifiable, Equatable, Sendable {
     let v: Int
 }
 
-private func row(_ id: String, _ v: Int) -> Row { Row(id: id, v: v) }
+private func row(_ id: String, _ v: Int) -> Row {
+    Row(id: id, v: v)
+}
 
 /// Reconciler under test: identity from `id`, change-detection from `v`.
 private let R = Reconciler<Row, Int>(contentKey: { $0.v })
@@ -16,18 +18,20 @@ private let R = Reconciler<Row, Int>(contentKey: { $0.v })
 /// Tiny deterministic PRNG so fuzz failures reproduce (no Foundation randomness).
 private struct LCG: RandomNumberGenerator {
     var state: UInt64
-    init(seed: UInt64) { state = seed &+ 0x9E3779B97F4A7C15 }
+    init(seed: UInt64) {
+        state = seed &+ 0x9E37_79B9_7F4A_7C15
+    }
+
     mutating func next() -> UInt64 {
-        state = state &* 6364136223846793005 &+ 1442695040888963407
+        state = state &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
         var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
-        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
         return z ^ (z >> 31)
     }
 }
 
 final class ReconcilerTests: XCTestCase {
-
     // MARK: - Outcome corpus — every case constructible
 
     func testOutcomeCorpus() {
@@ -148,10 +152,10 @@ final class ReconcilerTests: XCTestCase {
         // Careful tally: u=unchanged; mm=modifiedMine; mt=modifiedTheirs; rm=removedMine (mine dropped, theirs kept==base);
         // rb: base+mine present, theirs absent, mine==base ⇒ removedTheirs; conf=bothModified different; am=addedMine; at=addedTheirs.
         XCTAssertEqual(res.report.counts.unchanged, 1)
-        XCTAssertEqual(res.report.counts.modified, 2)   // mm + mt
-        XCTAssertEqual(res.report.counts.removed, 2)     // rm + rb(as removedTheirs)
-        XCTAssertEqual(res.report.counts.added, 2)       // am + at
-        XCTAssertEqual(res.report.counts.conflicts, 1)   // conf
+        XCTAssertEqual(res.report.counts.modified, 2) // mm + mt
+        XCTAssertEqual(res.report.counts.removed, 2) // rm + rb(as removedTheirs)
+        XCTAssertEqual(res.report.counts.added, 2) // am + at
+        XCTAssertEqual(res.report.counts.conflicts, 1) // conf
         XCTAssertEqual(res.report.counts.total, res.report.outcomes.count)
     }
 

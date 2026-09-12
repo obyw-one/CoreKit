@@ -61,5 +61,7 @@ public enum ReconcilePolicy<Element: Identifiable & Sendable>: Sendable where El
     case custom(@Sendable (Conflict<Element>) -> Decision<Element>)
 
     /// The default policy: never auto-resolve a semantic conflict.
-    public static var `default`: ReconcilePolicy { .refuseOnConflict }
+    public static var `default`: ReconcilePolicy {
+        .refuseOnConflict
+    }
 }

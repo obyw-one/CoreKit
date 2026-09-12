@@ -28,8 +28,8 @@ import Foundation
 /// callers project their id to a comparable form. This is a second generic parameter
 /// — deliberately NOT `contentKey: (Element) -> some Hashable`, which is invalid Swift.
 public struct Reconciler<Element: Identifiable & Sendable, Key: Hashable>: Sendable
-where Element.ID: Comparable & Sendable {
-
+    where Element.ID: Comparable & Sendable
+{
     /// Extracts the change-detection token. Two elements with equal `contentKey` are
     /// considered unchanged relative to each other; unequal means modified.
     public let contentKey: @Sendable (Element) -> Key
@@ -163,7 +163,7 @@ where Element.ID: Comparable & Sendable {
         case (true, false, true):
             return kt == kb ? .removedMine(id) : .modifyRemoveConflict(id, modifiedSide: .theirs)
         case (true, true, true):
-            if km == kb && kt == kb { return .unchanged(id) }
+            if km == kb, kt == kb { return .unchanged(id) }
             if km == kb { return .modifiedTheirs(id) }
             if kt == kb { return .modifiedMine(id) }
             return .bothModified(id, km == kt ? .same : .different)
@@ -174,15 +174,15 @@ where Element.ID: Comparable & Sendable {
     private func keptElement(for outcome: ReconcileOutcome<Element.ID>, mine: Element?, theirs: Element?) -> Element? {
         switch outcome {
         case .unchanged, .addedMine, .modifiedMine:
-            return mine
+            mine
         case .addedTheirs, .modifiedTheirs:
-            return theirs
+            theirs
         case .bothAdded(_, .same), .bothModified(_, .same):
-            return mine // identical to theirs by contentKey
+            mine // identical to theirs by contentKey
         case .removedMine, .removedTheirs, .removedByBoth:
-            return nil
+            nil
         case .bothAdded(_, .different), .bothModified(_, .different), .modifyRemoveConflict:
-            return nil // conflicts are resolved via policy, not here
+            nil // conflicts are resolved via policy, not here
         }
     }
 
@@ -195,16 +195,16 @@ where Element.ID: Comparable & Sendable {
     ) -> (DecisionKind, Element?) {
         switch policy {
         case .refuseOnConflict:
-            return (.refused, nil)
+            (.refused, nil)
         case .preferMine:
-            return (.mine, mine) // nil when mine's action was removal → excluded
+            (.mine, mine) // nil when mine's action was removal → excluded
         case .preferTheirs:
-            return (.theirs, theirs)
-        case .custom(let decide):
+            (.theirs, theirs)
+        case let .custom(decide):
             switch decide(conflict) {
-            case .pickMine: return (.mine, mine)
-            case .pickTheirs: return (.theirs, theirs)
-            case .synthesize(let element): return (.synthesized, element)
+            case .pickMine: (.mine, mine)
+            case .pickTheirs: (.theirs, theirs)
+            case let .synthesize(element): (.synthesized, element)
             }
         }
     }

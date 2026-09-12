@@ -14,9 +14,8 @@ import Foundation
 /// callers in the position of choosing a "safe" default, which is exactly
 /// how the substituted-default silent-fail class ships.
 public protocol DeviceCapacityProbing: Sendable {
-
-  /// Read one fresh snapshot at this instant. Never cached — the same
-  /// device gives a different honest answer idle vs under pressure
-  /// (BR-CP-03), so callers control cadence.
-  func probe() -> DeviceCapacitySnapshot
+    /// Read one fresh snapshot at this instant. Never cached — the same
+    /// device gives a different honest answer idle vs under pressure
+    /// (BR-CP-03), so callers control cadence.
+    func probe() -> DeviceCapacitySnapshot
 }

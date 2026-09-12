@@ -66,11 +66,11 @@ public enum ReconcileOutcome<ID: Hashable & Sendable>: Sendable, Equatable {
         case let .unchanged(id), let .addedMine(id), let .addedTheirs(id),
              let .removedMine(id), let .removedTheirs(id), let .removedByBoth(id),
              let .modifiedMine(id), let .modifiedTheirs(id):
-            return id
+            id
         case let .bothAdded(id, _), let .bothModified(id, _):
-            return id
+            id
         case let .modifyRemoveConflict(id, _):
-            return id
+            id
         }
     }
 
@@ -79,14 +79,14 @@ public enum ReconcileOutcome<ID: Hashable & Sendable>: Sendable, Equatable {
     public var isConflict: Bool {
         switch self {
         case let .bothAdded(_, c), let .bothModified(_, c):
-            return c == .different
+            c == .different
         case .modifyRemoveConflict:
-            return true
+            true
         default:
-            return false
+            false
         }
     }
 }
 
-// Codable evidence: available whenever the id is Codable — never requires `Element: Codable`.
+/// Codable evidence: available whenever the id is Codable — never requires `Element: Codable`.
 extension ReconcileOutcome: Codable where ID: Codable {}

@@ -20,7 +20,6 @@ import Foundation
 /// Not thread-safe by itself: it is a value type — wrap it in an actor when
 /// shared across concurrency domains.
 public struct OrderedQueue<Key: Comparable & Sendable, Payload: Sendable>: Sendable {
-
     // MARK: - Storage
 
     @usableFromInline
@@ -52,14 +51,23 @@ public struct OrderedQueue<Key: Comparable & Sendable, Payload: Sendable>: Senda
 
     // MARK: - Inspection
 
-    public var count: Int { slots.count }
-    public var isEmpty: Bool { slots.isEmpty }
+    public var count: Int {
+        slots.count
+    }
+
+    public var isEmpty: Bool {
+        slots.isEmpty
+    }
 
     /// The payload that would dequeue next, without removing it.
-    public func peek() -> Payload? { slots.first?.payload }
+    public func peek() -> Payload? {
+        slots.first?.payload
+    }
 
     /// All payloads in dequeue order (non-consuming snapshot).
-    public var orderedPayloads: [Payload] { slots.map(\.payload) }
+    public var orderedPayloads: [Payload] {
+        slots.map(\.payload)
+    }
 
     // MARK: - Mutation
 

@@ -32,7 +32,6 @@ public enum RepositoryError: Error, Sendable, Equatable {
 public actor InMemoryRepository<ID: Hashable & Sendable, ModelType: Codable & Sendable>:
     RepositoryProtocol
 {
-
     private var storage: [ID: ModelType] = [:]
     private var insertionOrder: [ID] = []
     /// Total `save` calls accepted, ignoring upsert collapse. Lets an

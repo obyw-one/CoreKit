@@ -48,7 +48,9 @@ public struct ReconcileCounts: Sendable, Equatable, Codable {
 
     public init() {}
 
-    public var total: Int { unchanged + added + removed + modified + converged + conflicts }
+    public var total: Int {
+        unchanged + added + removed + modified + converged + conflicts
+    }
 }
 
 // MARK: - ReconcileReport
@@ -72,10 +74,14 @@ public struct ReconcileReport<ID: Hashable & Sendable>: Sendable, Equatable {
     }
 
     /// The ids left unresolved under `refuseOnConflict` — the conflict map.
-    public var refusedIDs: [ID] { decisions.filter { $0.kind == .refused }.map(\.id) }
+    public var refusedIDs: [ID] {
+        decisions.filter { $0.kind == .refused }.map(\.id)
+    }
 
     /// `true` when at least one conflict was refused (escalation needed).
-    public var hasRefusedConflicts: Bool { decisions.contains { $0.kind == .refused } }
+    public var hasRefusedConflicts: Bool {
+        decisions.contains { $0.kind == .refused }
+    }
 }
 
 extension ReconcileReport: Codable where ID: Codable {}
@@ -96,5 +102,7 @@ public struct ReconcileResolution<Element: Identifiable & Sendable>: Sendable wh
         self.refused = refused
     }
 
-    public var hasUnresolvedConflicts: Bool { !refused.isEmpty }
+    public var hasUnresolvedConflicts: Bool {
+        !refused.isEmpty
+    }
 }

@@ -80,8 +80,8 @@
 //
 
 import Combine
-import SwiftUI
 import os
+import SwiftUI
 
 @MainActor
 public protocol Coordinator<UserAction, Presenter>: AnyObject, Identifiable, Equatable {
@@ -101,11 +101,10 @@ public protocol Coordinator<UserAction, Presenter>: AnyObject, Identifiable, Equ
     func handleUser(action: UserAction)
 }
 
-
 // MARK: - Method useful to Coordinator
 
-extension Coordinator {
-    public func retrieveOrCreateCoordinator<T: Coordinator>() -> T {
+public extension Coordinator {
+    func retrieveOrCreateCoordinator<T: Coordinator>() -> T {
         guard let coordinator = children.last(where: { $0 is T }) else {
             let newCoordinator = T(parent: self)
             children.append(newCoordinator)
@@ -116,16 +115,15 @@ extension Coordinator {
     }
 }
 
-
 // MARK: - Base implementation for `any Coordinator`
 
 @MainActor
 open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
-
     public typealias UserAction = U
     public typealias Presenter = P
 
     // MARK: - Variables
+
     // Private variables
 
     private var cancellables = Set<AnyCancellable>()
@@ -134,7 +132,7 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
 
     public let id = UUID()
 
-    public weak var parent: (any Coordinator)? = nil
+    public weak var parent: (any Coordinator)?
     public var children: [any Coordinator] = [] {
         didSet {
             AppLog.navigation.debug("Coordinator.children(\(DebugAddress.address(self))): \(self.children)")
@@ -143,8 +141,8 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
 
     public let userAction = PassthroughSubject<U, Never>()
 
-
     // MARK: - Constructors
+
     /**
      Method to create an abstract coordinator and init the user interaction binding
 
@@ -154,7 +152,6 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
 
         bindUserInteraction()
     }
-
 
     // MARK: - Public methods
 
@@ -169,7 +166,6 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
         assertionFailure("Need to override this function to build the Presenter")
         return EmptyView() as! P
     }
-
 
     // MARK: - Private methods
 
@@ -187,7 +183,6 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
             .store(in: &cancellables)
     }
 
-
     // MARK: - Handle user actions
 
     /**
@@ -197,12 +192,13 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
      - Warning: This is an abstract methods, you need to override it on every child.
 
      */
-    open func handleUser(action: UserAction) {
+    open func handleUser(action _: UserAction) {
         assertionFailure("Need to override this function to handle actions")
     }
 
-
     // MARK: - Equatable Conformance
 
-    nonisolated public static func ==(lhs: BaseCoordinator<U, P>, rhs: BaseCoordinator<U, P>) -> Bool { lhs.id == rhs.id }
+    nonisolated public static func == (lhs: BaseCoordinator<U, P>, rhs: BaseCoordinator<U, P>) -> Bool {
+        lhs.id == rhs.id
+    }
 }

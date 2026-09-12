@@ -1,16 +1,16 @@
 import Foundation
-@testable import CoreKit
 import Testing
+@testable import CoreKit
 
 // MARK: - ContentHashTests
+
 //
 // Vectors pin the wire contract: lowercase hex SHA-256 — the exact sidecar
 // format kagami already emits, so fleet adoption never invalidates caches.
 
 @Suite("ContentHash")
 struct ContentHashTests {
-
-    // NIST/RFC-known SHA-256 vectors.
+    /// NIST/RFC-known SHA-256 vectors.
     @Test("empty input matches the canonical SHA-256 empty digest")
     func emptyVector() {
         #expect(

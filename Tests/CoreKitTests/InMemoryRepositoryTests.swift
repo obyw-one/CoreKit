@@ -1,6 +1,6 @@
-@testable import CoreKit
 import Foundation
 import Testing
+@testable import CoreKit
 
 // MARK: - InMemoryRepositoryTests
 
@@ -11,7 +11,6 @@ private struct Row: Codable, Sendable, Equatable {
 
 @Suite("InMemoryRepository")
 struct InMemoryRepositoryTests {
-
     @Test("save then get round-trips")
     func saveGetRoundTrip() async throws {
         let repo = InMemoryRepository<String, Row>()

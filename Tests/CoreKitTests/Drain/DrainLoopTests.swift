@@ -1,6 +1,6 @@
 import Foundation
-@testable import CoreKit
 import Testing
+@testable import CoreKit
 
 // MARK: - Fixtures
 
@@ -30,7 +30,9 @@ private final class ScriptedDrainer: Draining, @unchecked Sendable {
         self.scanError = scanError
     }
 
-    func itemID(_ item: Item) -> String { item.id }
+    func itemID(_ item: Item) -> String {
+        item.id
+    }
 
     func scan() async throws -> [Item] {
         if let e = scanError { throw e }
@@ -52,8 +54,13 @@ private final class ScriptedDrainer: Draining, @unchecked Sendable {
 
     enum Failure: Error { case boom(String) }
 
-    var processed: [String] { lock.withLock { processedIDs } }
-    var checkpointed: [String] { lock.withLock { checkpointedIDs } }
+    var processed: [String] {
+        lock.withLock { processedIDs }
+    }
+
+    var checkpointed: [String] {
+        lock.withLock { checkpointedIDs }
+    }
 }
 
 /// Thread-safe collectors for the loop's hooks.
@@ -62,17 +69,27 @@ private final class Collector: @unchecked Sendable {
     private var summaries: [DrainTickSummary] = []
     private var quarantines: [DrainQuarantineRecord] = []
 
-    func add(_ s: DrainTickSummary) { lock.withLock { summaries.append(s) } }
-    func add(_ q: DrainQuarantineRecord) { lock.withLock { quarantines.append(q) } }
-    var allSummaries: [DrainTickSummary] { lock.withLock { summaries } }
-    var allQuarantines: [DrainQuarantineRecord] { lock.withLock { quarantines } }
+    func add(_ s: DrainTickSummary) {
+        lock.withLock { summaries.append(s) }
+    }
+
+    func add(_ q: DrainQuarantineRecord) {
+        lock.withLock { quarantines.append(q) }
+    }
+
+    var allSummaries: [DrainTickSummary] {
+        lock.withLock { summaries }
+    }
+
+    var allQuarantines: [DrainQuarantineRecord] {
+        lock.withLock { quarantines }
+    }
 }
 
 // MARK: - Suite
 
 @Suite("DrainLoop engine")
 struct DrainLoopTests {
-
     @Test("tickOnce processes and checkpoints every scanned item")
     func tickProcessesAll() async {
         let drainer = ScriptedDrainer(scans: [["a", "b", "c"]])
@@ -158,7 +175,7 @@ struct DrainLoopTests {
 
     @Test("run() backs off exponentially on idle ticks and caps at backoffMax")
     func backoffCurve() async {
-        let drainer = ScriptedDrainer(scans: [])  // always idle
+        let drainer = ScriptedDrainer(scans: []) // always idle
         let clock = FakeDrainClock(cancelAfterSleeps: 5)
         let config = DrainLoopConfig(tickInterval: 5, backoffBase: 1, backoffMultiplier: 2, backoffMax: 6)
         let loop = DrainLoop(drainer: drainer, config: config, clock: clock)

@@ -16,7 +16,6 @@ import Foundation
 ///   * All timing flows through the injected `DrainClock` — a
 ///     `FakeDrainClock` makes tick and backoff sequences pure data.
 public actor DrainLoop<D: Draining> {
-
     private let drainer: D
     private let config: DrainLoopConfig
     private let clock: any DrainClock
@@ -157,6 +156,11 @@ public actor DrainLoop<D: Draining> {
 
     // MARK: - Introspection (tests + doctor)
 
-    public var processedIDs: Set<String> { seen }
-    public var quarantinedIDs: Set<String> { quarantined }
+    public var processedIDs: Set<String> {
+        seen
+    }
+
+    public var quarantinedIDs: Set<String> {
+        quarantined
+    }
 }

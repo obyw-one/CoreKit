@@ -9,77 +9,76 @@ import Foundation
 
 // MARK: - Dependency Injection Module
 
-/// Dependency Injection Module
-///
-/// This file provides the main entry point for all DI-related types.
-/// The DI system uses a single `Container.default` variable that gets configured
-/// differently based on the environment (Production or Mock).
-///
-/// ## Quick Start
-///
-/// ### 1. Configure the Container at App Launch
-///
-/// ```swift
-/// @main
-/// struct MyApp: App {
-///     init() {
-///         DI.configure(for: .production, assemblies: [
-///             DIAssemblyServices(),
-///             DIAssemblyUseCases(),
-///             DIAssemblyLogin(),
-///         ])
-///     }
-/// }
-/// ```
-///
-/// ### 2. Register Your Classes (in Assembly files)
-///
-/// ```swift
-/// // In DIAssemblyServices.swift
-/// struct DIAssemblyServices: DIAssembly {
-///     func assemble(container: Container, environment: DIEnvironment) {
-///         switch environment {
-///         case .production:
-///             try! container.register(NetworkProtocol.self) { _ in NetworkService() }
-///         case .mock:
-///             try! container.register(NetworkProtocol.self) { _ in MockNetworkService() }
-///         }
-///     }
-/// }
-/// ```
-///
-/// ### 3. Resolve Dependencies
-///
-/// ```swift
-/// let viewModel = try Container.default.resolve(MyViewModel.self)
-/// // or use @Resolve property wrapper
-/// @Resolve var crudUseCase: any CRUDUseCaseProtocol
-/// ```
-///
-/// ### 4. For SwiftUI Previews
-///
-/// ```swift
-/// #Preview {
-///     DI.configure(for: .mock, assemblies: [MockAssembly()])
-///     MyView()
-/// }
-/// ```
-///
-/// ## Files in this Module
-///
-/// | File | Purpose |
-/// |------|---------|
-/// | `Container.swift` | Core DI container with registration & resolution |
-/// | `DIEnvironment.swift` | Environment enum (.production, .mock) |
-/// | `DIAssembly.swift` | Protocol for assembly-by-concern registrations |
-/// | `Resolve.swift` | @Resolve property wrapper |
-///
+// Dependency Injection Module
+//
+// This file provides the main entry point for all DI-related types.
+// The DI system uses a single `Container.default` variable that gets configured
+// differently based on the environment (Production or Mock).
+//
+// ## Quick Start
+//
+// ### 1. Configure the Container at App Launch
+//
+// ```swift
+// @main
+// struct MyApp: App {
+//     init() {
+//         DI.configure(for: .production, assemblies: [
+//             DIAssemblyServices(),
+//             DIAssemblyUseCases(),
+//             DIAssemblyLogin(),
+//         ])
+//     }
+// }
+// ```
+//
+// ### 2. Register Your Classes (in Assembly files)
+//
+// ```swift
+// // In DIAssemblyServices.swift
+// struct DIAssemblyServices: DIAssembly {
+//     func assemble(container: Container, environment: DIEnvironment) {
+//         switch environment {
+//         case .production:
+//             try! container.register(NetworkProtocol.self) { _ in NetworkService() }
+//         case .mock:
+//             try! container.register(NetworkProtocol.self) { _ in MockNetworkService() }
+//         }
+//     }
+// }
+// ```
+//
+// ### 3. Resolve Dependencies
+//
+// ```swift
+// let viewModel = try Container.default.resolve(MyViewModel.self)
+// // or use @Resolve property wrapper
+// @Resolve var crudUseCase: any CRUDUseCaseProtocol
+// ```
+//
+// ### 4. For SwiftUI Previews
+//
+// ```swift
+// #Preview {
+//     DI.configure(for: .mock, assemblies: [MockAssembly()])
+//     MyView()
+// }
+// ```
+//
+// ## Files in this Module
+//
+// | File | Purpose |
+// |------|---------|
+// | `Container.swift` | Core DI container with registration & resolution |
+// | `DIEnvironment.swift` | Environment enum (.production, .mock) |
+// | `DIAssembly.swift` | Protocol for assembly-by-concern registrations |
+// | `Resolve.swift` | @Resolve property wrapper |
+//
 
 // MARK: - DI Namespace
 
 /// Namespace for DI configuration helpers
 public enum DI {
-
     // MARK: - Public API
 
     /// Configure the default container for the given environment with the provided assemblies.
