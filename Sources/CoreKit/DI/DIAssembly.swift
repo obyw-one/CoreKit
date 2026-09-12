@@ -27,7 +27,6 @@ public protocol DIAssembly {
 // MARK: - Resolver Convenience Extensions
 
 public extension Resolver {
-
     /// Resolve a dependency or crash with a descriptive error.
     /// Use this when the dependency is required and must exist.
     @discardableResult

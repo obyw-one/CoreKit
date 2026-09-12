@@ -10,8 +10,8 @@ import Combine
 import Foundation
 import Network
 
-extension NetworkStatus {
-    public enum InterfaceType: Sendable, Equatable {
+public extension NetworkStatus {
+    enum InterfaceType: Sendable, Equatable {
         case unknown
         case wifi
         case cellular
@@ -41,7 +41,7 @@ actor NetworkStatusStorage {
 @MainActor
 public class NetworkStatus: ObservableObject {
     private let monitor = NWPathMonitor()
-    @Published private(set) public var interfaceType: InterfaceType? {
+    @Published public private(set) var interfaceType: InterfaceType? {
         didSet {
             // Cache the value in the actor for nonisolated access
             Task {
@@ -52,9 +52,9 @@ public class NetworkStatus: ObservableObject {
 
     nonisolated public init() {
         monitor.pathUpdateHandler = { [weak self] path in
-            guard let self = self else { return }
+            guard let self else { return }
             Task { @MainActor [weak self] in
-                guard let self = self else { return }
+                guard let self else { return }
                 self.interfaceType = self.checkInterfaceType(path)
             }
         }
@@ -84,7 +84,7 @@ public class NetworkStatus: ObservableObject {
     /// Async access to the current network interface type.
     /// Uses the cached value stored in `NetworkStatusStorage` actor.
     /// This is safe to call from any isolation context.
-    public nonisolated static var currentInterfaceType: InterfaceType? {
+    nonisolated public static var currentInterfaceType: InterfaceType? {
         get async {
             await NetworkStatusStorage.shared.interfaceType
         }

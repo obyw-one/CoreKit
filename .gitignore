@@ -2,8 +2,14 @@
 .swiftpm/
 build/
 
+# kagami — same rule as shikki's projects/shikki/.gitignore:
+#   scopes.toml is the auto-generated scope CACHE (regenerable via `kagami auto-discover --write-cache`),
+#   never committed (a committed cache goes stale — obyw-one/CoreKit#21 review);
+#   only the operator-authored .kagami/scopes.override.toml is tracked config.
+.kagami/scopes.toml
+.kagami/scopes.yaml
+.kagami/tmp/
 # kagami SQLite scratch — history/shard DBs are local test state, never committed
-# (only .kagami/scopes*.toml is tracked config)
 .kagami/history.db
 .kagami/history.db-shm
 .kagami/history.db-wal

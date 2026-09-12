@@ -14,7 +14,7 @@ public extension View {
     ///   - condition: The condition to evaluate.
     ///   - transform: The transform to apply to the source `View`.
     /// - Returns: Either the original `View` or the modified `View` if the condition is `true`.
-    @ViewBuilder func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+    @ViewBuilder func `if`(_ condition: Bool, transform: (Self) -> some View) -> some View {
         if condition {
             transform(self)
         } else {
@@ -39,7 +39,9 @@ public extension View {
     /// - Parameters:
     ///   - transform: The transform to apply to the source `View`.
     /// - Returns: Apply the block on the original `View`.
-    func apply<V: View>(@ViewBuilder _ block: (Self) -> V) -> V { block(self) }
+    func apply<V: View>(@ViewBuilder _ block: (Self) -> V) -> V {
+        block(self)
+    }
 
     func asAnyView() -> AnyView {
         AnyView(self)

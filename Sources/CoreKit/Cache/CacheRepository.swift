@@ -169,7 +169,7 @@ public struct CacheCodec: Sendable, Equatable {
 
 // MARK: - Internal Container
 
-fileprivate struct CacheContainerModel<ModelType: Codable>: Codable, Sendable where ModelType: Sendable {
+private struct CacheContainerModel<ModelType: Codable & Sendable>: Codable, Sendable {
     var timestamp: TimeInterval
     var modelType: String
     var body: String // Serialized ref of ModelType data
@@ -180,7 +180,7 @@ fileprivate struct CacheContainerModel<ModelType: Codable>: Codable, Sendable wh
         do {
             let serializedData = try JSONEncoder().encode(data)
             let serializedStr = String(data: serializedData, encoding: .utf8)
-            guard let serialized = serializedStr, serialized.count > 0 else {
+            guard let serialized = serializedStr, !serialized.isEmpty else {
                 throw CacheRepositoryError.encodedError
             }
 
@@ -204,7 +204,7 @@ fileprivate struct CacheContainerModel<ModelType: Codable>: Codable, Sendable wh
         return try JSONDecoder().decode(ModelType.self, from: data)
     }
 
-    // Explicit Codable implementation to prevent main actor isolation
+    /// Explicit Codable implementation to prevent main actor isolation
     private enum CodingKeys: String, CodingKey {
         case timestamp
         case modelType
@@ -425,7 +425,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         let fileUrl = self.fileUrl(id)
         do {
             try FileManager.default.removeItem(at: fileUrl)
-        } catch let error {
+        } catch {
             AppLog.cache.warning("Cache delete failed: \(error)")
             throw CacheRepositoryError.deleteError
         }
@@ -477,8 +477,8 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
                 throw CacheRepositoryError.noCacheAvailable
             }
             guard let text = String(data: localCache, encoding: .utf8),
-                  let model = text as? ModelType
-            else {
+                  let model = text as? ModelType else
+            {
                 AppLog.cache.error("Data in cache not decoded (.rawString requires ModelType == String, got \(ModelType.self))")
                 throw CacheRepositoryError.decodedError
             }
@@ -499,7 +499,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         if case .never = invalidateTime { return true }
 
         // Check if Time To Live is OK
-        if case .inTime(let ttl) = invalidateTime {
+        if case let .inTime(ttl) = invalidateTime {
             let isExpired = container.timestamp + ttl <= Date().timeIntervalSince1970
 
             // If cache is fresh, use it
@@ -522,7 +522,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         // `.never` never expires — regardless of file age.
         if case .never = invalidateTime { return false }
 
-        if case .inTime(let ttl) = invalidateTime {
+        if case let .inTime(ttl) = invalidateTime {
             let attrs = try? FileManager.default.attributesOfItem(atPath: fileUrl.path)
             guard let mtime = attrs?[.modificationDate] as? Date else {
                 // Can't read mtime → treat as fresh, don't destroy readable data.
@@ -544,14 +544,13 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     }
 
     nonisolated private func fileUrl(_ id: String) -> URL {
-        let filename: String
-        switch naming {
+        let filename: String = switch naming {
         case .legacy:
-            filename = name + "-" + id + ".cache"
-        case .bareId(let ext):
-            filename = ext.map { "\(id).\($0)" } ?? id
-        case .custom(let derive):
-            filename = derive(name, id)
+            name + "-" + id + ".cache"
+        case let .bareId(ext):
+            ext.map { "\(id).\($0)" } ?? id
+        case let .custom(derive):
+            derive(name, id)
         }
         return baseDirectory.appendingPathComponent(filename)
     }

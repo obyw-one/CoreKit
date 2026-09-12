@@ -1,5 +1,5 @@
-@testable import CoreKit
 import XCTest
+@testable import CoreKit
 
 struct TestModel: Codable, Equatable, Sendable {
     let id: Int
@@ -7,7 +7,6 @@ struct TestModel: Codable, Equatable, Sendable {
 }
 
 final class CacheRepositoryTests: XCTestCase {
-
     var cache: CacheRepository<TestModel>!
     let testId = "test-item-\(UUID().uuidString)"
 
@@ -115,7 +114,7 @@ final class CacheRepositoryTests: XCTestCase {
 
     /// The 2-arg `init(_:invalidateTime:)` shape used all over the ecosystem
     /// must still compile & default to `.container` envelope + `documentDirectory`.
-    func testBackCompatTwoArgInitDefaultsToContainerEnvelope() throws {
+    func testBackCompatTwoArgInitDefaultsToContainerEnvelope() {
         let legacy = CacheRepository<TestModel>("BackCompatDefaults", invalidateTime: .inTime(ttl: 3600))
         XCTAssertEqual(legacy.envelope, .container)
     }
@@ -129,9 +128,8 @@ final class CacheRepositoryTests: XCTestCase {
     // MARK: - Directory override
 
     private func makeTempDir(_ label: String = "cache") -> URL {
-        let dir = FileManager.default.temporaryDirectory
+        FileManager.default.temporaryDirectory
             .appendingPathComponent("CacheRepoTests-\(label)-\(UUID().uuidString)", isDirectory: true)
-        return dir
     }
 
     func testDirectoryOverrideCreatesDirectoryAndWritesThere() throws {
@@ -321,7 +319,8 @@ final class CacheRepositoryTests: XCTestCase {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("corekit-basedir-\(UUID().uuidString)", isDirectory: true)
         let scoped = CacheRepository<TestModel>(
-            "WsMeta", invalidateTime: .never, baseDirectory: tmp)
+            "WsMeta", invalidateTime: .never, baseDirectory: tmp
+        )
         let model = TestModel(id: 42, name: "scoped")
 
         try scoped.save("x", data: model)
@@ -334,6 +333,7 @@ final class CacheRepositoryTests: XCTestCase {
 
         try? FileManager.default.removeItem(at: tmp)
     }
+
     func testCustomBaseDirectoryIsCreatedIfMissing() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("corekit-mkdir-\(UUID().uuidString)", isDirectory: true)
@@ -347,5 +347,4 @@ final class CacheRepositoryTests: XCTestCase {
                       "save must create intermediate base directories")
         try? FileManager.default.removeItem(at: tmp.deletingLastPathComponent())
     }
-
 }

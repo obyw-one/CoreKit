@@ -20,18 +20,20 @@ public enum ContainerError: Error, LocalizedError, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case .notRegistered(let type):
-            return "ContainerError: '\(type)' is not registered in the container"
-        case .circularDependency(let path):
-            return "ContainerError: Circular dependency detected: \(path)"
-        case .resolutionFailed(let type, let underlying):
-            return "ContainerError: Failed to resolve '\(type)': \(underlying.localizedDescription)"
-        case .invalidRegistration(let message):
-            return "ContainerError: Invalid registration: \(message)"
+        case let .notRegistered(type):
+            "ContainerError: '\(type)' is not registered in the container"
+        case let .circularDependency(path):
+            "ContainerError: Circular dependency detected: \(path)"
+        case let .resolutionFailed(type, underlying):
+            "ContainerError: Failed to resolve '\(type)': \(underlying.localizedDescription)"
+        case let .invalidRegistration(message):
+            "ContainerError: Invalid registration: \(message)"
         }
     }
 
-    public var errorDescription: String? { description }
+    public var errorDescription: String? {
+        description
+    }
 }
 
 // MARK: - Registration Scope
@@ -166,11 +168,10 @@ final class ResolutionContext {
 
 /// Dependency Injection Container with Swinject-style API
 open class Container: Resolver, @unchecked Sendable {
-
     // MARK: - Static Properties
 
     private static let defaultLock = NSLock()
-    nonisolated(unsafe) private static var _default: Container = Container()
+    nonisolated(unsafe) private static var _default: Container = .init()
 
     /// Default shared container instance (thread-safe)
     public static var `default`: Container {
@@ -312,7 +313,7 @@ open class Container: Resolver, @unchecked Sendable {
 
         guard let reg = registration ?? resolveLazyRegistration(for: key) else {
             // Try parent container
-            if let parent = parent {
+            if let parent {
                 return try parent.resolve(type, name: name)
             }
             throw ContainerError.notRegistered(typeName)
@@ -322,7 +323,7 @@ open class Container: Resolver, @unchecked Sendable {
         do {
             let resolved = try reg.resolve(using: self)
             guard let typed = resolved as? T else {
-                    throw ContainerError.resolutionFailed(
+                throw ContainerError.resolutionFailed(
                     typeName,
                     underlying: NSError(
                         domain: "Container",
@@ -419,7 +420,7 @@ open class Container: Resolver, @unchecked Sendable {
         for (key, _) in registrations {
             AppLog.di.debug("  - \(key)")
         }
-        if let parent = parent {
+        if let parent {
             AppLog.di.debug("Parent container '\(parent.name)':")
             parent.printRegistrations()
         }
@@ -427,7 +428,7 @@ open class Container: Resolver, @unchecked Sendable {
 
     // MARK: - Private Helpers
 
-    private func registrationKey<T>(for type: T.Type, name: String?) -> String {
+    private func registrationKey(for type: (some Any).Type, name: String?) -> String {
         let baseKey = String(describing: type)
         return name.map { "\(baseKey):\($0)" } ?? baseKey
     }

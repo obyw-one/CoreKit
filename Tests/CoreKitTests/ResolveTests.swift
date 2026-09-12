@@ -1,8 +1,7 @@
-@testable import CoreKit
 import XCTest
+@testable import CoreKit
 
 final class ResolveTests: XCTestCase {
-
     override func setUp() {
         super.setUp()
         DI.reset()
@@ -46,9 +45,9 @@ final class ResolveTests: XCTestCase {
         XCTAssertEqual(callCount, 1)
     }
 
-    func testResolvePropertyWrapperWithTransientScope() {
+    func testResolvePropertyWrapperWithTransientScope() throws {
         var callCount = 0
-        try! Container.default.register(Int.self, scope: .transient) { _ in
+        try Container.default.register(Int.self, scope: .transient) { _ in
             callCount += 1
             return callCount
         }

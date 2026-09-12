@@ -10,7 +10,6 @@ import Foundation
 // MARK: - Shared Date Formatters (DRY — single source of truth)
 
 public extension DateFormatter {
-
     /// PocketBase UTC ISO 8601 with fractional seconds and space separator.
     /// Example: `2024-04-04 13:47:54.692Z`
     static var pocketbase: ISO8601DateFormatter {
@@ -60,7 +59,6 @@ public extension DateFormatter {
 // MARK: - Shared ISO8601 Formatters
 
 public extension ISO8601DateFormatter {
-
     /// Standard ISO 8601 for API communication and DB storage.
     /// Example: `2026-03-26T14:30:05Z`
     static var standard: ISO8601DateFormatter {
@@ -81,24 +79,35 @@ public extension ISO8601DateFormatter {
 // MARK: - Date Convenience
 
 public extension Date {
-
     /// Format with the shared short display formatter.
-    var shortDisplay: String { DateFormatter.shortDisplay.string(from: self) }
+    var shortDisplay: String {
+        DateFormatter.shortDisplay.string(from: self)
+    }
 
     /// Format with the shared compact display formatter.
-    var compactDisplay: String { DateFormatter.compactDisplay.string(from: self) }
+    var compactDisplay: String {
+        DateFormatter.compactDisplay.string(from: self)
+    }
 
     /// Format as time only.
-    var timeOnly: String { DateFormatter.timeOnly.string(from: self) }
+    var timeOnly: String {
+        DateFormatter.timeOnly.string(from: self)
+    }
 
     /// Format as date only.
-    var dateOnly: String { DateFormatter.dateOnly.string(from: self) }
+    var dateOnly: String {
+        DateFormatter.dateOnly.string(from: self)
+    }
 
     /// Format as standard ISO 8601.
-    var iso8601: String { ISO8601DateFormatter.standard.string(from: self) }
+    var iso8601: String {
+        ISO8601DateFormatter.standard.string(from: self)
+    }
 
     /// Format as precise ISO 8601 (with fractional seconds).
-    var iso8601Precise: String { ISO8601DateFormatter.precise.string(from: self) }
+    var iso8601Precise: String {
+        ISO8601DateFormatter.precise.string(from: self)
+    }
 
     /// Human-readable relative time: "2h ago", "3d ago", "just now".
     var relativeDisplay: String {
@@ -106,7 +115,7 @@ public extension Date {
         if interval < 60 { return "just now" }
         if interval < 3600 { return "\(Int(interval / 60))m ago" }
         if interval < 86400 { return "\(Int(interval / 3600))h ago" }
-        if interval < 604800 { return "\(Int(interval / 86400))d ago" }
+        if interval < 604_800 { return "\(Int(interval / 86400))d ago" }
         return self.shortDisplay
     }
 }

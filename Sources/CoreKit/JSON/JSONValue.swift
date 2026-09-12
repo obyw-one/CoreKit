@@ -58,12 +58,12 @@ public enum JSONValue: Sendable, Equatable {
     /// back to a caller that must speak `JSONSerialization`.
     public var untyped: Any {
         switch self {
-        case .string(let s): return s
-        case .integer(let i): return NSNumber(value: i)
-        case .double(let d): return NSNumber(value: d)
-        case .bool(let b): return NSNumber(value: b)
-        case .array(let a): return a.map(\.untyped)
-        case .object(let o):
+        case let .string(s): return s
+        case let .integer(i): return NSNumber(value: i)
+        case let .double(d): return NSNumber(value: d)
+        case let .bool(b): return NSNumber(value: b)
+        case let .array(a): return a.map(\.untyped)
+        case let .object(o):
             var out: [String: Any] = [:]
             for (k, v) in o { out[k] = v.untyped }
             return out

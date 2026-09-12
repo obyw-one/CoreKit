@@ -1,11 +1,10 @@
-@testable import CoreKit
 import XCTest
+@testable import CoreKit
 
 /// OrderedQueue — the stable priority-queue mechanics extracted from shikki
 /// (#1529 review): ascending-key dequeue, FIFO within equal keys, run-to-run
 /// determinism, batch/element-wise equivalence.
 final class OrderedQueueTests: XCTestCase {
-
     struct Key: Comparable, Sendable, Equatable {
         let rank: Int
         let stamp: Date
@@ -19,7 +18,7 @@ final class OrderedQueueTests: XCTestCase {
     }
 
     private func key(_ rank: Int, _ offset: TimeInterval = 0, _ slug: String = "s") -> Key {
-        Key(rank: rank, stamp: Date(timeIntervalSince1970: 1_000 + offset), slug: slug)
+        Key(rank: rank, stamp: Date(timeIntervalSince1970: 1000 + offset), slug: slug)
     }
 
     func test_dequeuesInAscendingKeyOrder() {
@@ -62,11 +61,11 @@ final class OrderedQueueTests: XCTestCase {
     }
 
     func test_determinismAcrossRuns() {
-        // Same input sequence → identical dequeue order, twice over.
+        /// Same input sequence → identical dequeue order, twice over.
         func build() -> [String] {
             var q = OrderedQueue<Key, String>()
             q.enqueue("x", key: key(2, 0, "x"))
-            q.enqueue("y", key: key(2, 0, "x"))  // fully equal key → arrival breaks
+            q.enqueue("y", key: key(2, 0, "x")) // fully equal key → arrival breaks
             q.enqueue("z", key: key(0))
             return q.drain()
         }
