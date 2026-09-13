@@ -13,14 +13,22 @@ import Foundation
 public enum TestPackagePaths {
     /// The nearest ancestor of `testFile` that carries `Package.swift`.
     public static func packageRoot(fromTestFile testFile: StaticString = #filePath) -> URL {
-        var dir = URL(fileURLWithPath: "\(testFile)").deletingLastPathComponent()
+        packageRoot(fromFilePath: "\(testFile)")
+    }
+
+    /// Dynamic-path variant — takes a runtime `String`. Exists so a test can
+    /// synthesize a nested fake tree in a temp dir and prove the marker walk
+    /// resolves the SAME package root from files at different depths
+    /// (spec one-path-resolution-ssot T-01).
+    public static func packageRoot(fromFilePath path: String) -> URL {
+        var dir = URL(fileURLWithPath: path).deletingLastPathComponent()
         while dir.path != "/" {
             if FileManager.default.fileExists(atPath: dir.appendingPathComponent("Package.swift").path) {
                 return dir
             }
             dir = dir.deletingLastPathComponent()
         }
-        preconditionFailure("TestPackagePaths.packageRoot: no Package.swift above \(testFile)")
+        preconditionFailure("TestPackagePaths.packageRoot: no Package.swift above \(path)")
     }
 
     /// `<packageRoot>/Sources` for the package that owns `testFile`.

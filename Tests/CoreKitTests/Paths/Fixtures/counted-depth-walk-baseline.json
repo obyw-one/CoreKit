@@ -1,0 +1,5 @@
+{
+  "generated_at": "2026-09-13",
+  "note": "CoreKit counted-depth #filePath walk baseline (spec one-path-resolution-ssot BR-PATH-07). Keys are repo-relative paths from package root; values are the max allowed hits per file. A file NOT listed here MUST have zero hits. Counts only go down — a new hit fails the ratchet. CoreKit W1 target: 1 -> 0 (DeviceCapacitySnapshotTests migrated to TestPackagePaths.sourcesRoot(ofModule:)).",
+  "files": {}
+}
