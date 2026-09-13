@@ -1,3 +1,4 @@
+import CoreKitTestSupport
 import Foundation
 import Testing
 @testable import CoreKit
@@ -193,27 +194,12 @@ struct DeviceCapacitySnapshotTests {
 
     // MARK: - Helpers
 
-    /// Locate `Sources/CoreKit/` from this test file's on-disk path.
-    /// Swift Testing runs the binary out-of-tree, so `#filePath` is the
-    /// stable reference point back to the working tree.
+    /// Locate `Sources/CoreKit/` via the fleet's one path SSoT
+    /// (`TestPackagePaths.sourcesRoot(ofModule:)`). Replaces a hand-counted
+    /// `#filePath` walk (spec one-path-resolution-ssot BR-PATH-07 — CoreKit
+    /// baseline 1 → 0).
     private static func locateCoreKitSources() throws -> URL {
-        let testFile = URL(fileURLWithPath: #filePath)
-        // .../Tests/CoreKitTests/Capacity/DeviceCapacitySnapshotTests.swift
-        //   → .../Tests/CoreKitTests/Capacity
-        //   → .../Tests/CoreKitTests
-        //   → .../Tests
-        //   → .../  (project root)
-        let projectRoot =
-            testFile
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-                .deletingLastPathComponent()
-        let sourcesDir =
-            projectRoot
-                .appendingPathComponent("Sources")
-                .appendingPathComponent("CoreKit")
-
+        let sourcesDir = TestPackagePaths.sourcesRoot(ofModule: "CoreKit")
         var isDir: ObjCBool = false
         guard
             FileManager.default.fileExists(atPath: sourcesDir.path, isDirectory: &isDir),

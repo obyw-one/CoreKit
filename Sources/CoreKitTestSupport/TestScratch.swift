@@ -1,15 +1,5 @@
 import Foundation
 
-// MARK: - PathSweepError
-
-/// Thrown when a scratch removal is aimed at a path that does not carry the
-/// sweep sentinel. A sweep that could reach live data must refuse, loudly
-/// (spec one-path-resolution-ssot BR-PATH-03).
-public enum PathSweepError: Error, Equatable, Sendable {
-    /// `path` is not under `<testsRoot>/.test-runs/<runID>` of this scratch.
-    case outsideSandbox(path: String)
-}
-
 // MARK: - TestScratch
 
 /// The ONE way a test writes a temporary tree: under the package's own
@@ -76,14 +66,22 @@ public struct TestScratch: Sendable, Equatable {
     /// Removes `url` — only if it lies under this scratch's
     /// `<testsRoot>/.test-runs/<runID>/`. Anything else throws
     /// `PathSweepError.outsideSandbox`; symlinks are resolved before the
-    /// check so a link into live data cannot smuggle a path in.
+    /// check so a link into live data cannot smuggle a path in. On success,
+    /// the removed path is logged to stderr — a sweep that runs in silence
+    /// is a sweep that hides bugs (spec one-path-resolution-ssot BR-PATH-03).
     public func removeScratchDir(_ url: URL) throws {
         guard isInsideSandbox(url) else {
             throw PathSweepError.outsideSandbox(path: url.path)
         }
         if FileManager.default.fileExists(atPath: url.path) {
             try FileManager.default.removeItem(at: url)
+            Self.logRemoval(url)
         }
+    }
+
+    private static func logRemoval(_ url: URL) {
+        let line = "TestScratch.removeScratchDir: removed \(url.path)\n"
+        FileHandle.standardError.write(Data(line.utf8))
     }
 
     /// `true` when `url` (standardized, symlinks resolved) is strictly
