@@ -1,0 +1,13 @@
+{
+  "base": {
+    "branch": "develop",
+    "fresh": true,
+    "sha": "1dddeb0947b711da2242da3ca55f850f775076c0"
+  },
+  "base_source": "flag",
+  "base_stale": false,
+  "feature": "One way to find a source root, one seam to inject a data root",
+  "schema": "shikki.dispatch\/1",
+  "spec_path": "\/Users\/jeoffrey\/.shikki\/tmp\/specs\/one-path-resolution-ssot-corekit-2026-09-12.md",
+  "written_at": "2026-09-13T08:31:47Z"
+}

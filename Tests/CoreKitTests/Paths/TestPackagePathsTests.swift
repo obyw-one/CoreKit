@@ -45,9 +45,10 @@ struct TestPackagePathsTests {
     @Test("sourcesRoot(ofModule:) composes as <packageRoot>/Sources/<module>")
     func sourcesRootOfModuleComposes() {
         let root = TestPackagePaths.packageRoot()
-        let expected = root
-            .appendingPathComponent("Sources", isDirectory: true)
-            .appendingPathComponent("CoreKit", isDirectory: true)
+        let expected =
+            root
+                .appendingPathComponent("Sources", isDirectory: true)
+                .appendingPathComponent("CoreKit", isDirectory: true)
         #expect(TestPackagePaths.sourcesRoot(ofModule: "CoreKit") == expected)
         #expect(FileManager.default.fileExists(atPath: expected.path))
     }

@@ -8,9 +8,10 @@ import Testing
 struct TestSandboxTests {
     /// The tests-root for these tests: `<packageRoot>/.tests` — the same
     /// convention `TestScratch.forPackage()` uses. Git-ignored.
-    private static let testsRoot = TestPackagePaths
-        .packageRoot()
-        .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
+    private static let testsRoot =
+        TestPackagePaths
+            .packageRoot()
+            .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
 
     @Test("make(under:) mints a directory under <testsRoot>/.test-runs/<uuid>/ and creates it")
     func makeMintsAndCreatesRoot() throws {

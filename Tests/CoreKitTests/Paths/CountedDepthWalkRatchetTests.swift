@@ -69,9 +69,10 @@ struct CountedDepthWalkRatchetTests {
         // A miniature tree under a fresh sandbox — the scanner walks the
         // whole subtree and reports one hit per pattern line, sorted by
         // file then line.
-        let testsRoot = TestPackagePaths
-            .packageRoot()
-            .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
+        let testsRoot =
+            TestPackagePaths
+                .packageRoot()
+                .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
         let sandbox = try TestSandbox.make(under: testsRoot)
         defer { try? sandbox.sweep() }
 
@@ -82,19 +83,23 @@ struct CountedDepthWalkRatchetTests {
         )
         FileManager.default.createFile(
             atPath: a.path,
-            contents: Data("""
-            let x = URL(fileURLWithPath: \(Self.filePathToken))
-            let y = x.\(Self.delCall))
-            """.utf8)
+            contents: Data(
+                """
+                let x = URL(fileURLWithPath: \(Self.filePathToken))
+                let y = x.\(Self.delCall))
+                """.utf8
+            )
         )
         FileManager.default.createFile(
             atPath: b.path,
-            contents: Data("""
-            // preamble
-            let x = URL(fileURLWithPath: \(Self.filePathToken))
-            let y = x.\(Self.delCall))
-            let z = URL(fileURLWithPath: \(Self.filePathToken))
-            """.utf8)
+            contents: Data(
+                """
+                // preamble
+                let x = URL(fileURLWithPath: \(Self.filePathToken))
+                let y = x.\(Self.delCall))
+                let z = URL(fileURLWithPath: \(Self.filePathToken))
+                """.utf8
+            )
         )
 
         let hits = try CountedDepthWalkRatchet.scan(testsRoot: sandbox.root)
@@ -109,10 +114,11 @@ struct CountedDepthWalkRatchetTests {
 
     @Test("CoreKit's test tree has zero counted-depth walks — baseline is empty (T-08 CoreKit)")
     func coreKitTestsAreClean() throws {
-        let testsRoot = TestPackagePaths
-            .packageRoot()
-            .appendingPathComponent("Tests", isDirectory: true)
-            .appendingPathComponent("CoreKitTests", isDirectory: true)
+        let testsRoot =
+            TestPackagePaths
+                .packageRoot()
+                .appendingPathComponent("Tests", isDirectory: true)
+                .appendingPathComponent("CoreKitTests", isDirectory: true)
         let hits = try CountedDepthWalkRatchet.scan(testsRoot: testsRoot)
         #expect(
             hits.isEmpty,
@@ -122,13 +128,14 @@ struct CountedDepthWalkRatchetTests {
 
     @Test("baseline file on disk decodes to an empty file map")
     func baselineDecodesEmpty() throws {
-        let baselineURL = TestPackagePaths
-            .packageRoot()
-            .appendingPathComponent("Tests", isDirectory: true)
-            .appendingPathComponent("CoreKitTests", isDirectory: true)
-            .appendingPathComponent("Paths", isDirectory: true)
-            .appendingPathComponent("Fixtures", isDirectory: true)
-            .appendingPathComponent("counted-depth-walk-baseline.json")
+        let baselineURL =
+            TestPackagePaths
+                .packageRoot()
+                .appendingPathComponent("Tests", isDirectory: true)
+                .appendingPathComponent("CoreKitTests", isDirectory: true)
+                .appendingPathComponent("Paths", isDirectory: true)
+                .appendingPathComponent("Fixtures", isDirectory: true)
+                .appendingPathComponent("counted-depth-walk-baseline.json")
         let data = try Data(contentsOf: baselineURL)
         let baseline = try JSONDecoder().decode(CountedDepthWalkBaseline.self, from: data)
         #expect(baseline.files.isEmpty)

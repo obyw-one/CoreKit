@@ -87,12 +87,13 @@ public struct TestScratch: Sendable, Equatable {
     /// `true` when `url` (standardized, symlinks resolved) is strictly
     /// below `<testsRoot>/.test-runs/<runID>`.
     public func isInsideSandbox(_ url: URL) -> Bool {
-        let sandbox = testsRoot
-            .appendingPathComponent(Self.runsSegment, isDirectory: true)
-            .appendingPathComponent(runID, isDirectory: true)
-            .resolvingSymlinksInPath()
-            .standardizedFileURL
-            .pathComponents
+        let sandbox =
+            testsRoot
+                .appendingPathComponent(Self.runsSegment, isDirectory: true)
+                .appendingPathComponent(runID, isDirectory: true)
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+                .pathComponents
         let target = url.resolvingSymlinksInPath().standardizedFileURL.pathComponents
         guard target.count > sandbox.count else { return false }
         return Array(target.prefix(sandbox.count)) == sandbox
