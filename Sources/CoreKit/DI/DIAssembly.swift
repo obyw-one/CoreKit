@@ -29,6 +29,10 @@ public protocol DIAssembly {
 public extension Resolver {
     /// Resolve a dependency or crash with a descriptive error.
     /// Use this when the dependency is required and must exist.
+    /// Public since 0.10.0: WabiSabi's app code resolves at property-initialiser
+    /// sites (`Container.default.require(ThemeManager.self)`) where a `throws`
+    /// cannot be written, and the fork made this public for exactly that. The
+    /// kit exposes the same surface so the fork can be deleted.
     @discardableResult
     func require<T>(_ type: T.Type) -> T {
         do {
