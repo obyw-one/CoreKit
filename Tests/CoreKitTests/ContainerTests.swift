@@ -174,6 +174,93 @@ final class ContainerTests: XCTestCase {
         }
     }
 
+    // MARK: - Structured concurrency (the two races WabiSabi's fork fixed first)
+
+    /// Fifty tasks of ONE task group resolve the same three-type chain. Tasks
+    /// share the cooperative thread pool, so with a per-THREAD resolution
+    /// stack two of them see each other's push and the container reports a
+    /// cycle that does not exist. The stack must be per-task.
+    func testTaskGroupResolutionsWithDependenciesDoNotFalseDetectCycles() async throws {
+        try container.register(String.self, scope: .transient) { _ in "service" }
+        try container.register(Int.self, scope: .transient) { _ in 7 }
+        try container.register(Double.self, scope: .transient) { resolver in
+            let s: String = try resolver.resolve(String.self)
+            let i: Int = try resolver.resolve(Int.self)
+            return Double(s.count + i)
+        }
+        let container = self.container!
+
+        let results = try await withThrowingTaskGroup(of: Double.self) { group in
+            for _ in 0..<50 {
+                group.addTask { try container.resolve(Double.self) }
+            }
+            var all: [Double] = []
+            for try await value in group { all.append(value) }
+            return all
+        }
+        XCTAssertEqual(results.count, 50)
+        XCTAssertTrue(results.allSatisfy { $0 == 14 }, "every task resolves the whole chain: \(results)")
+    }
+
+    /// Twenty tasks resolve a cached type whose factory itself resolves
+    /// another cached type. With the factory running under the registration
+    /// lock, the tasks block pool threads while waiting for a holder that may
+    /// never be scheduled — the suite hangs instead of failing. The factory
+    /// must run outside the lock, and `.cached` must still publish ONE instance.
+    func testCachedFactoryRunsOutsideTheLockAndPublishesOneInstance() async throws {
+        final class Leaf: @unchecked Sendable {}
+        final class Root: @unchecked Sendable { let leaf: Leaf; init(leaf: Leaf) { self.leaf = leaf } }
+        try container.register(Leaf.self, scope: .cached) { _ in
+            Thread.sleep(forTimeInterval: 0.01)
+            return Leaf()
+        }
+        try container.register(Root.self, scope: .cached) { resolver in
+            Root(leaf: try resolver.resolve(Leaf.self))
+        }
+        let container = self.container!
+
+        let roots = try await withThrowingTaskGroup(of: Root.self) { group in
+            for _ in 0..<20 {
+                group.addTask { try container.resolve(Root.self) }
+            }
+            var all: [Root] = []
+            for try await value in group { all.append(value) }
+            return all
+        }
+        XCTAssertEqual(roots.count, 20)
+        let first = try XCTUnwrap(roots.first)
+        XCTAssertTrue(roots.allSatisfy { $0 === first }, ".cached publishes exactly one Root")
+        XCTAssertTrue(roots.allSatisfy { $0.leaf === first.leaf }, ".cached publishes exactly one Leaf")
+    }
+
+    /// A real cycle is still a cycle inside a task group — the per-task stack
+    /// detects it, and the error names the path.
+    func testRealCycleIsStillDetectedInsideATaskGroup() async {
+        container.register(String.self) { resolver in
+            let _: Int = try resolver.resolve(Int.self)
+            return "unreachable"
+        }
+        container.register(Int.self) { resolver in
+            let _: String = try resolver.resolve(String.self)
+            return 0
+        }
+        let container = self.container!
+
+        let failures = await withTaskGroup(of: Bool.self) { group in
+            for _ in 0..<10 {
+                group.addTask {
+                    do { _ = try container.resolve(String.self); return false } catch ContainerError.circularDependency(let path) {
+                        return path.contains("String → Int → String")
+                    } catch { return false }
+                }
+            }
+            var count = 0
+            for await detected in group where detected { count += 1 }
+            return count
+        }
+        XCTAssertEqual(failures, 10, "every task reports the cycle String → Int → String")
+    }
+
     // MARK: - Parent Container
 
     func testParentContainerFallback() throws {
