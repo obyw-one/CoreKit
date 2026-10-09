@@ -5,10 +5,10 @@
 name = "CoreKitCache"
 language = "swift"
 package_path = "."
-type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests"]
+type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests"]
 test_file_patterns = ["**/CoreKitTests/*.swift"]
 timeout = 300
-expected_test_min = 20
+expected_test_min = 93
 description = "CoreKit cache + container + resolve suites. Run: kagami test --scope CoreKitCache"
 
 [[scopes]]
