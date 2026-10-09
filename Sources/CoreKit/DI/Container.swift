@@ -20,13 +20,13 @@ public enum ContainerError: Error, LocalizedError, CustomStringConvertible {
 
     public var description: String {
         switch self {
-        case let .notRegistered(type):
+        case .notRegistered(let type):
             "ContainerError: '\(type)' is not registered in the container"
-        case let .circularDependency(path):
+        case .circularDependency(let path):
             "ContainerError: Circular dependency detected: \(path)"
-        case let .resolutionFailed(type, underlying):
+        case .resolutionFailed(let type, let underlying):
             "ContainerError: Failed to resolve '\(type)': \(underlying.localizedDescription)"
-        case let .invalidRegistration(message):
+        case .invalidRegistration(let message):
             "ContainerError: Invalid registration: \(message)"
         }
     }
@@ -84,29 +84,48 @@ class Registration<T>: RegistrationProtocol {
         self.factory = factory
     }
 
+    /// THE FACTORY NEVER RUNS UNDER THE LOCK.
+    ///
+    /// It used to: `lock.lock(); defer { unlock }` wrapped the whole switch,
+    /// so arbitrary user code — which may itself resolve further
+    /// dependencies — ran while holding a blocking NSLock. From an async
+    /// context that starves the cooperative thread pool: 20 tasks block
+    /// pool threads waiting, and the holder may never be scheduled to
+    /// release. WabiSabi's suite did not assert-fail on this, it HUNG — the
+    /// runner restarted five times before xcodebuild gave up at 600 s.
+    ///
+    /// The lock now guards only the instance field. A cached factory may run
+    /// more than once under contention, but exactly one result is PUBLISHED
+    /// and every caller gets that one — which is what `.cached` promises.
+    /// Losing a redundant instance is the correct trade against a deadlock.
     func resolve(using resolver: Resolver) throws -> Any {
-        lock.lock()
-        defer { lock.unlock() }
-
         switch scope {
         case .transient:
             return try factory(resolver)
 
         case .cached:
-            if let existing = instance {
-                return existing
-            }
-            let newInstance = try factory(resolver)
-            instance = newInstance
-            return newInstance
+            lock.lock()
+            let existing = instance
+            lock.unlock()
+            if let existing { return existing }
+            let candidate = try factory(resolver)
+            lock.lock()
+            defer { lock.unlock() }
+            if let raced = instance { return raced }  // someone else published first
+            instance = candidate
+            return candidate
 
         case .weak:
-            if let weakRef = weakInstance, let existing = weakRef as? T {
-                return existing
-            }
-            let newInstance = try factory(resolver)
-            weakInstance = newInstance as AnyObject
-            return newInstance
+            lock.lock()
+            let existingWeak = weakInstance as? T
+            lock.unlock()
+            if let existingWeak { return existingWeak }
+            let candidate = try factory(resolver)
+            lock.lock()
+            defer { lock.unlock() }
+            if let raced = weakInstance as? T { return raced }
+            weakInstance = candidate as AnyObject
+            return candidate
         }
     }
 
@@ -120,47 +139,48 @@ class Registration<T>: RegistrationProtocol {
 
 // MARK: - Resolution Context (Thread Safety + Circular Detection)
 
-/// Per-thread, per-container resolution tracking for circular dependency detection.
+/// Per-RESOLUTION-SCOPE stacks used to detect circular dependencies.
 ///
-/// Each (thread, container) pair gets its own resolution stack via `Thread.threadDictionary`,
-/// so concurrent resolves on different threads don't interfere, and parent/child
-/// container delegation doesn't false-detect circularity.
-final class ResolutionContext {
-    private let threadKey: String
+/// Was `Thread.current.threadDictionary`. That is wrong under structured
+/// concurrency and failed in exactly the ways the tests describe:
+///
+///   - tasks in a `withThrowingTaskGroup` SHARE the cooperative thread pool,
+///     so two concurrent resolutions landed on one thread and saw each
+///     other's stack — a false circular-dependency report
+///     (`testTaskGroupResolutionsWithDependenciesDoNotFalseDetectCycles`)
+///   - an `async` task may resume on a DIFFERENT thread than it suspended
+///     on, so a push and its matching pop could target different stacks,
+///     leaking entries into unrelated work
+///
+/// `@TaskLocal` binds to the task, not the thread: it inherits into child
+/// tasks structurally, is invisible to siblings, and unwinds with the scope
+/// — which is the shape circular-dependency detection actually needs.
+enum ResolutionStack {
+    /// Keyed by context so sibling containers never share a stack, even
+    /// when they carry the same `name`.
+    @TaskLocal static var stacks: [String: [String]] = [:]
+}
+
+final class ResolutionContext: Sendable {
+    private let key: String
 
     init() {
-        self.threadKey = "CoreKit.ResolutionContext.\(UUID().uuidString)"
+        self.key = "CoreKit.ResolutionContext.\(UUID().uuidString)"
     }
 
-    private var currentStack: [String] {
-        get { Thread.current.threadDictionary[threadKey] as? [String] ?? [] }
-        set { Thread.current.threadDictionary[threadKey] = newValue }
+    /// The cycle path if `type` is already being resolved in THIS task, else nil.
+    func cyclePath(for type: String) -> String? {
+        let stack = ResolutionStack.stacks[key] ?? []
+        guard stack.contains(type) else { return nil }
+        return (stack + [type]).joined(separator: " → ")
     }
 
-    /// Push type onto the current thread's stack.
-    /// Returns error string if circular dependency detected.
-    func push(_ type: String) -> String? {
-        var stack = currentStack
-        if stack.contains(type) {
-            return stack.joined(separator: " → ") + " → " + type
-        }
-        stack.append(type)
-        currentStack = stack
-        return nil
-    }
-
-    /// Pop type from the current thread's stack.
-    func pop(_ type: String) {
-        var stack = currentStack
-        if let index = stack.lastIndex(of: type) {
-            stack.remove(at: index)
-        }
-        currentStack = stack
-    }
-
-    /// Clear the current thread's stack.
-    func clear() {
-        Thread.current.threadDictionary.removeObject(forKey: threadKey)
+    /// Run `body` with `type` pushed onto this task's stack. Scope-bound, so
+    /// there is no pop to forget and nothing survives a thrown error.
+    func withResolving<R>(_ type: String, _ body: () throws -> R) rethrows -> R {
+        var next = ResolutionStack.stacks
+        next[key] = (next[key] ?? []) + [type]
+        return try ResolutionStack.$stacks.withValue(next, operation: body)
     }
 }
 
@@ -299,48 +319,47 @@ open class Container: Resolver, @unchecked Sendable {
         let key = registrationKey(for: type, name: name)
         let typeName = String(describing: type) + (name.map { "(\($0))" } ?? "")
 
-        // Circular dependency detection
-        if let cyclePath = context.push(typeName) {
+        // Circular dependency detection, scoped to THIS task.
+        if let cyclePath = context.cyclePath(for: typeName) {
             throw ContainerError.circularDependency(cyclePath)
         }
 
-        defer { context.pop(typeName) }
+        return try context.withResolving(typeName) {
+            // Look up registration
+            lock.lock()
+            let registration = registrations[key]
+            lock.unlock()
 
-        // Look up registration
-        lock.lock()
-        let registration = registrations[key]
-        lock.unlock()
-
-        guard let reg = registration ?? resolveLazyRegistration(for: key) else {
-            // Try parent container
-            if let parent {
-                return try parent.resolve(type, name: name)
+            guard let reg = registration ?? resolveLazyRegistration(for: key) else {
+                // Try parent container
+                if let parent {
+                    return try parent.resolve(type, name: name)
+                }
+                throw ContainerError.notRegistered(typeName)
             }
-            throw ContainerError.notRegistered(typeName)
-        }
 
-        // Resolve instance
-        do {
-            let resolved = try reg.resolve(using: self)
-            guard let typed = resolved as? T else {
-                throw ContainerError.resolutionFailed(
-                    typeName,
-                    underlying: NSError(
-                        domain: "Container",
-                        code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: "Type mismatch: expected \(T.self), got \(Swift.type(of: resolved))"]
+            // Resolve instance
+            do {
+                let resolved = try reg.resolve(using: self)
+                guard let typed = resolved as? T else {
+                    throw ContainerError.resolutionFailed(
+                        typeName,
+                        underlying: NSError(
+                            domain: "Container",
+                            code: -1,
+                            userInfo: [NSLocalizedDescriptionKey: "Type mismatch: expected \(T.self), got \(Swift.type(of: resolved))"]
+                        )
                     )
-                )
+                }
+                return typed
+            } catch let error as ContainerError {
+                throw error
+            } catch {
+                throw ContainerError.resolutionFailed(typeName, underlying: error)
             }
-            return typed
-        } catch let error as ContainerError {
-            throw error
-        } catch {
-            throw ContainerError.resolutionFailed(typeName, underlying: error)
         }
     }
 
-    /// Resolve with non-optional name (for Resolver protocol conformance)
     public func resolve<T>(_ type: T.Type, name: String) throws -> T {
         try resolve(type, name: Optional(name))
     }
@@ -383,7 +402,6 @@ open class Container: Resolver, @unchecked Sendable {
         }
         registrations.removeAll()
         pendingAssemblies.removeAll()
-        context.clear()
     }
 
     /// Remove specific registration
