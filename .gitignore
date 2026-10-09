@@ -9,6 +9,8 @@ build/
 .kagami/scopes.toml
 .kagami/scopes.yaml
 .kagami/tmp/
+# kagami per-run artefacts — evidence lives in ~/.kagami/history.db, never in the tree
+.kagami/runs/
 # kagami SQLite scratch — history/shard DBs are local test state, never committed
 .kagami/history.db
 .kagami/history.db-shm
