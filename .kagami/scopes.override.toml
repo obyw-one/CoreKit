@@ -5,7 +5,7 @@
 name = "CoreKitCache"
 language = "swift"
 package_path = "."
-type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests"]
+type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests"]
 test_file_patterns = ["**/CoreKitTests/*.swift"]
 timeout = 300
 expected_test_min = 93
