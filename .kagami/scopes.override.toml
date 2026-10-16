@@ -31,3 +31,15 @@ test_file_patterns = ["**/CoreKitTests/Utilities/ContentHashTests.swift"]
 expected_test_min = 6
 timeout = 600
 description = "ContentHash: SHA-256 vectors, format contract, streaming parity. Run: kagami test --scope CoreKitHash"
+
+[[scopes]]
+# FileIOProfile — plain/atomic/durable write profiles for CacheRepository
+# (resource-layer W0, decision 913790a1, 2026-10-16).
+name = "CoreKitFileIO"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["FileIOProfileTests"]
+test_file_patterns = ["**/CoreKitTests/FileIOProfileTests.swift"]
+expected_test_min = 10
+timeout = 300
+description = "FileIOProfile: per-profile write/read round-trips, durable lock-file lifecycle, concurrent-write integrity. Run: kagami test --scope CoreKitFileIO"
