@@ -7,6 +7,9 @@
 
 import Foundation
 import os
+#if canImport(Darwin)
+import Darwin
+#endif
 
 // MARK: - Protocol
 
@@ -263,6 +266,11 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     /// JSON codec configuration — honored by `.raw` only (see `CacheCodec`).
     public let codec: CacheCodec
 
+    /// Write-path profile controlling crash-atomicity and cross-process
+    /// exclusion. Default is `.atomic` — EXACTLY today's behavior.
+    /// See ``FileIOProfile`` for per-case guidance.
+    public let ioProfile: FileIOProfile
+
     /// Create a `CacheRepository`.
     ///
     /// - Parameters:
@@ -287,19 +295,25 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     ///   - codec: JSON codec configuration for `.raw` files (dates /
     ///     pretty-print / sorted keys). `.container` ignores it by design —
     ///     its byte shape is the historical envelope. See `CacheCodec`.
+    ///   - ioProfile: write-path profile. `.atomic` (default) is EXACTLY
+    ///     the previous behavior — no change for existing callers.
+    ///     Use `.durable` when multiple processes may write the same file.
+    ///     See ``FileIOProfile`` for per-case guidance.
     public init(
         _ name: String,
         invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
         baseDirectory: URL? = nil,
         envelope: EnvelopeMode = .container,
         naming: FileNaming = .legacy,
-        codec: CacheCodec = .default
+        codec: CacheCodec = .default,
+        ioProfile: FileIOProfile = .atomic
     ) {
         self.name = name
         self.invalidateTime = invalidateTime
         self.envelope = envelope
         self.naming = naming
         self.codec = codec
+        self.ioProfile = ioProfile
 
         // Resolve storage directory with a safe fallback chain — no more `.first!`.
         let resolved: URL
@@ -410,11 +424,78 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
                 }
                 toData = Data(text.utf8)
             }
-            try toData.write(to: fileUrl, options: .atomic)
+            try commitWrite(toData, to: fileUrl)
         } catch {
             AppLog.cache.error("Cache save error: \(error)")
             throw CacheRepositoryError.encodedError
         }
+    }
+
+    // MARK: - Write dispatch (FileIOProfile)
+
+    /// Commits `data` to `fileURL` according to the repository's `ioProfile`.
+    nonisolated private func commitWrite(_ data: Data, to fileURL: URL) throws {
+        switch ioProfile {
+        case .plain:
+            try data.write(to: fileURL)
+        case .atomic:
+            try data.write(to: fileURL, options: .atomic)
+        case .durable:
+            try durableWrite(data, to: fileURL)
+        }
+    }
+
+    /// Cross-process durable write: O_EXLOCK + temp-file + F_FULLFSYNC + rename.
+    ///
+    /// A sibling lock file (`.<filename>.lock`) is used as the exclusive-lock
+    /// target so the lock fd stays valid across the rename of the data file.
+    /// `O_EXLOCK` (BSD extension, Darwin only) atomically opens and acquires an
+    /// exclusive flock-equivalent lock; the lock is released when the fd closes.
+    nonisolated private func durableWrite(_ data: Data, to fileURL: URL) throws {
+#if canImport(Darwin)
+        let fm = FileManager.default
+        let dir = fileURL.deletingLastPathComponent()
+        let lockURL = dir.appendingPathComponent(".\(fileURL.lastPathComponent).lock")
+        let lockPath = lockURL.path
+
+        // Open (or create) the lock file with O_EXLOCK — blocks until the
+        // exclusive lock is available (no other fd holds it in another process).
+        // O_EXLOCK is a BSD extension that atomically open+flock(LOCK_EX).
+        let lockFd = Darwin.open(lockPath, O_CREAT | O_WRONLY | O_EXLOCK, S_IRUSR | S_IWUSR)
+        guard lockFd >= 0 else {
+            AppLog.cache.error("Durable write: could not acquire lock on \(lockPath) — errno \(errno)")
+            throw CacheRepositoryError.encodedError
+        }
+        defer { Darwin.close(lockFd) }   // releases O_EXLOCK automatically
+
+        // Write to a per-PID temp file alongside the target.
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let tempURL = dir.appendingPathComponent(".\(fileURL.lastPathComponent).tmp\(pid)")
+        defer { try? fm.removeItem(at: tempURL) }
+
+        try data.write(to: tempURL)
+
+        // F_FULLFSYNC: flush write-back cache to physical media (power-loss safety).
+        let tempFd = Darwin.open(tempURL.path, O_RDONLY)
+        if tempFd >= 0 {
+            _ = Darwin.fcntl(tempFd, F_FULLFSYNC)
+            Darwin.close(tempFd)
+        }
+
+        // Atomic rename while holding the lock — POSIX rename(2) replaces the
+        // target in one operation on APFS / HFS+.
+        guard Darwin.rename(tempURL.path, fileURL.path) == 0 else {
+            AppLog.cache.error("Durable write: rename failed — errno \(errno)")
+            throw CacheRepositoryError.encodedError
+        }
+        // Lock released when lockFd closes via defer.
+#else
+        // Non-Darwin fallback (no O_EXLOCK / F_FULLFSYNC): plain atomic write.
+        // This path is unreachable given CoreKit's declared platform list
+        // (iOS 17, macOS 14, tvOS 18) but provided for source portability.
+        AppLog.cache.warning("Durable write: Darwin not available — falling back to atomic write")
+        try data.write(to: fileURL, options: .atomic)
+#endif
     }
 
     nonisolated public func delete(_ id: String) throws {
