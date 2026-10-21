@@ -81,11 +81,20 @@
                 content()
             }
             .apply {
-                if #available(iOS 26.0, *) {
-                    $0.tabBarMinimizeBehavior(.onScrollDown)
-                } else {
+                // `tabBarMinimizeBehavior` / `.onScrollDown` are iOS-only.
+                //
+                // `#available(iOS 26.0, *)` does NOT keep them off tvOS: the `*`
+                // means "any other platform", so on tvOS the condition is true and
+                // the call is compiled. The type's own `@available(iOS 18.0, *)`
+                // has the same hole. Platform APIs need `#if os(...)`, which is a
+                // compile-time exclusion; `#available` only ever gates a version.
+                #if os(iOS)
+                    if #available(iOS 26.0, *) {
+                        $0.tabBarMinimizeBehavior(.onScrollDown)
+                    } else { $0 }
+                #else
                     $0
-                }
+                #endif
             }
             .tabViewStyle(.tabBarOnly)
             .background(ExtractImageViewsFromTabBar(result: { imageViews = $0 }))
@@ -115,8 +124,7 @@
                 // The compositingGroup sits two layers above the tab hosting controller.
                 if let compositingGroup = view.superview?.superview,
                    let tabHostingController = compositingGroup.subviews.last,
-                   let tabController = tabHostingController.subviews.first?.next as? UITabBarController
-                {
+                   let tabController = tabHostingController.subviews.first?.next as? UITabBarController {
                     extractImageViews(tabController.tabBar)
                 }
             }
