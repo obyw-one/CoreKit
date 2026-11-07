@@ -48,7 +48,8 @@ let package = Package(
         // impls on Darwin, pure-Swift on Linux). ONE fleet dep for hashing,
         // per [[spm-primitive-reuse-is-mandatory-not-a-question]]: plugins
         // consume CoreKit.ContentHash, never CryptoKit directly.
-        // 3.x or 4.x: ContentHash only uses SHA256, stable across both majors. `from: "3.0.0"`
+        // 3.x or 4.x: ContentHash only uses SHA256, whose API is stable across both majors
+        // (its Sendable conformance is not, see ContentHash.swift; linux-build.yml builds 3.x). `from: "3.0.0"`
         // capped consumers below 4.0 and downgraded them (ShikkiMCP#10 review: swift-crypto
         // 4.5.1 → 3.15.1, forced by a test-support dependency).
         .package(url: "https://github.com/apple/swift-crypto.git", "3.0.0"..<"5.0.0"),

@@ -1,4 +1,6 @@
-import Crypto
+// swift-crypto 3.x on Linux does not mark SHA256 Sendable; 4.x does. It is a value
+// type either way, and Package.swift allows both majors.
+@preconcurrency import Crypto
 import Foundation
 
 // MARK: - ContentHash
