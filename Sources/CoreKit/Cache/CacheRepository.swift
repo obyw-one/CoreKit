@@ -10,8 +10,6 @@ import Foundation
 import Darwin
 #elseif canImport(Glibc)
 import Glibc
-#elseif canImport(Musl)
-import Musl
 #endif
 
 // MARK: - Protocol
@@ -455,7 +453,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     /// when the fd closes. Sync is `F_FULLFSYNC` on Darwin, where plain `fsync`
     /// does not reach the media, and `fsync` elsewhere.
     nonisolated private func durableWrite(_ data: Data, to fileURL: URL) throws {
-#if canImport(Darwin) || canImport(Glibc) || canImport(Musl)
+#if canImport(Darwin) || canImport(Glibc)
         let fm = FileManager.default
         let dir = fileURL.deletingLastPathComponent()
         let lockPath = dir.appendingPathComponent(".\(fileURL.lastPathComponent).lock").path
@@ -515,7 +513,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
             close(dirFd)
         }
 #else
-        // No flock on this platform (Windows): NOT cross-process safe.
+        // Not built or tested here (Windows, musl): NOT cross-process safe.
         AppLog.cache.warning("Durable write: no flock on this platform — falling back to atomic write")
         try data.write(to: fileURL, options: .atomic)
 #endif

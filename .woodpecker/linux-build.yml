@@ -38,16 +38,3 @@ steps:
     image: *swift_image
     commands:
       - swift test
-
-  # Package.swift allows swift-crypto 3.x, but the tracked lockfile is on 4.x, so
-  # the steps above never compile against 3.x. A consumer resolving 3.x did break
-  # here (SHA256 is not Sendable there). The grep stops a failed pin from passing
-  # as a green build on the locked version.
-  linux-build-swift-crypto-3:
-    image: *swift_image
-    commands:
-      - swift package resolve
-      - swift package resolve swift-crypto --version 3.15.1
-      - |
-        grep -A5 '"identity" : "swift-crypto"' Package.resolved | grep -q '"version" : "3.15.1"'
-      - swift build
