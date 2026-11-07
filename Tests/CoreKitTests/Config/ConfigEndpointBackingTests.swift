@@ -23,7 +23,7 @@ private struct AppConfigFile: VirtualPathOwning {
 
 enum ConfigEndpointBackingKind: String, CaseIterable, Sendable {
     case settingsFile
-    case syncCache
+    case inMemoryCache
     case asyncObjectStore
     case plainRepository
     case scripted
@@ -55,9 +55,9 @@ struct ConfigEndpointBackingTests {
             try repository.save(Self.seeded.storageKey, data: expected)
             endpoint = RepositoryConfigEndpoint(repository: repository)
 
-        case .syncCache:
-            let repository = CacheRepository<AppConfig>("config", invalidateTime: .never, backing: InMemoryCacheBacking())
-            try repository.save(Self.seeded.storageKey, data: expected)
+        case .inMemoryCache:
+            let repository = AsyncCacheRepository<AppConfig>("config", invalidateTime: .never, backing: InMemoryCacheBacking())
+            try await repository.save(Self.seeded.storageKey, data: expected)
             endpoint = RepositoryConfigEndpoint(repository: repository)
 
         case .asyncObjectStore:
@@ -119,10 +119,10 @@ struct ConfigEndpointBackingTests {
             defer { tearDown() }
             let service = AppConfigService(
                 query: Self.seeded, endpoint: harness.endpoint,
-                cache: CacheRepository<AppConfig>("svc", invalidateTime: .never, backing: InMemoryCacheBacking()))
+                cache: AsyncCacheRepository<AppConfig>("svc", invalidateTime: .never, backing: InMemoryCacheBacking()))
             #expect(await service.bootstrap() == .fetched, "\(kind)")
-            blocks.append(service.block)
-            versions.append(service.currentConfig?.requiresUpdate(installedVersion: "1.0.0") ?? false)
+            blocks.append(await service.block)
+            versions.append(await service.currentConfig?.requiresUpdate(installedVersion: "1.0.0") ?? false)
         }
         #expect(Set(blocks.map { String(describing: $0) }).count == 1, "backings disagreed about the block: \(blocks)")
         #expect(Set(versions).count == 1)

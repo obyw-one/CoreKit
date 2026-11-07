@@ -10,7 +10,6 @@ enum BackingKind: String, CaseIterable, Sendable {
     case localFolderSync = "local folder / CacheRepository"
     case localFolderDurableSync = "local folder (durable) / CacheRepository"
     case localFolderAsync = "local folder / AsyncCacheRepository"
-    case inMemorySync = "in memory / CacheRepository"
     case inMemoryAsync = "in memory / AsyncCacheRepository"
     case objectStoreAsync = "object store / AsyncCacheRepository"
     case s3Async = "S3 client over a fake store / AsyncCacheRepository"
@@ -52,8 +51,7 @@ enum BackingHarnesses {
         case .localFolderSync: try local(kind, profile: .atomic, asynchronous: false)
         case .localFolderDurableSync: try local(kind, profile: .durable, asynchronous: false)
         case .localFolderAsync: try local(kind, profile: .atomic, asynchronous: true)
-        case .inMemorySync: inMemory(kind, asynchronous: false)
-        case .inMemoryAsync: inMemory(kind, asynchronous: true)
+        case .inMemoryAsync: inMemory(kind)
         case .objectStoreAsync: objectStore(kind)
         case .s3Async: try s3(kind)
         }
@@ -112,16 +110,16 @@ enum BackingHarnesses {
 
     // MARK: In memory
 
-    private static func inMemory(_ kind: BackingKind, asynchronous: Bool) -> BuiltBacking {
+    private static func inMemory(_ kind: BackingKind) -> BuiltBacking {
         let backing = InMemoryCacheBacking()
         let age: @Sendable (String, TimeInterval) async throws -> Void = { entry, seconds in
             guard let current = try await backing.fetch(entry)?.modified else { return }
-            backing.setModified(current.addingTimeInterval(-seconds), for: entry)
+            await backing.setModified(current.addingTimeInterval(-seconds), for: entry)
         }
         let harness = CacheConformanceHarness(
             label: kind.rawValue,
-            makePayloadSubject: { asynchronous ? asyncSubject($0, over: backing) : syncSubject($0, over: backing) },
-            makeTextSubject: { asynchronous ? asyncSubject($0, over: backing) : syncSubject($0, over: backing) },
+            makePayloadSubject: { asyncSubject($0, over: backing) },
+            makeTextSubject: { asyncSubject($0, over: backing) },
             storedBytes: { try await backing.fetch($0)?.data },
             plant: { try await backing.put($1, as: $0) },
             age: age)

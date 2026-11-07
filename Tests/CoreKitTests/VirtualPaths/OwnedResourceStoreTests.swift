@@ -199,31 +199,31 @@ struct OwnedResourceStoreTests {
 
     // MARK: ResourceStoring
 
-    private func exercise(_ store: some ResourceStoring<Ledger>) throws -> [Ledger?] {
-        var seen: [Ledger?] = [try store.load()]
-        try store.save(sample)
-        seen.append(try store.load())
-        try store.delete()
-        seen.append(try store.load())
+    private func exercise(_ store: some ResourceStoring<Ledger>) async throws -> [Ledger?] {
+        var seen: [Ledger?] = [try await store.load()]
+        try await store.save(sample)
+        seen.append(try await store.load())
+        try await store.delete()
+        seen.append(try await store.load())
         return seen
     }
 
     @Test("code written against ResourceStoring behaves the same over the file store and the double")
-    func sameOverBoth() throws {
+    func sameOverBoth() async throws {
         let box = try Sandbox()
         defer { box.sweep() }
-        let file = try exercise(OwnedResourceStore<Ledger>(LedgerFile(), paths: box.paths))
-        let memory = try exercise(InMemoryResourceStore<Ledger>())
+        let file = try await exercise(OwnedResourceStore<Ledger>(LedgerFile(), paths: box.paths))
+        let memory = try await exercise(InMemoryResourceStore<Ledger>())
         #expect(file == [nil, sample, nil])
         #expect(memory == file)
     }
 
     @Test("the in-memory double honours an initial document and reports existence")
-    func inMemoryDouble() throws {
+    func inMemoryDouble() async throws {
         let store = InMemoryResourceStore(initial: sample)
-        #expect(store.exists())
-        #expect(try store.load() == sample)
-        try store.delete()
-        #expect(!store.exists())
+        #expect(await store.exists())
+        #expect(try await store.load() == sample)
+        try await store.delete()
+        #expect(await !store.exists())
     }
 }
