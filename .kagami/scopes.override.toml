@@ -80,3 +80,16 @@ test_file_patterns = ["**/CoreKitUITests/**.swift"]
 expected_test_min = 1
 timeout_seconds = 300
 description = "CoreKitUI bridge: NetworkStatus.InterfaceType aliases the core type. Run: kagami test --scope CoreKitUI"
+
+[[scopes]]
+# Resource layer, wave 1 (spec d3f8a1b2): VirtualPathOwning + the registry +
+# PathResolving over an injected root, containment, the agnostic representation
+# and the object-store address (bucket/key with a node id).
+name = "CoreKitVirtualPaths"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["PathSegmentTests", "VirtualPathTests", "PathResolvingTests", "ResourceAddressTests", "OwnedResourceStoreTests"]
+test_file_patterns = ["**/CoreKitTests/VirtualPaths/**.swift"]
+expected_test_min = 70
+timeout_seconds = 300
+description = "Virtual paths: validated segments, agnostic representation, prod/test over one root, containment, object-store address. Run: kagami test --scope CoreKitVirtualPaths"
