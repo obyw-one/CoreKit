@@ -107,3 +107,18 @@ test_file_patterns = ["**/CoreKitTests/Environment/**.swift", "**/CoreKitTests/F
 expected_test_min = 37
 timeout_seconds = 300
 description = "Env keys and feature flags: typed env vocabulary, no-fallback reader, flag defaults + remote merge, resolver slot. Run: kagami test --scope CoreKitEnvFlags"
+
+[[scopes]]
+# Resource layer, wave 4 (spec d3f8a1b2, BR-RP-07/11, T-06/T-11): the cache
+# contract over swappable backings. ONE behaviour suite and ONE backing contract
+# run over every backing CoreKit ships (local folder, in memory, object store,
+# the S3 client over an emulated store), through the synchronous and the
+# asynchronous facade; BackendKit and NetKit run the same suites over theirs.
+name = "CoreKitCacheBackings"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests"]
+test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
+expected_test_min = 56
+timeout_seconds = 600
+description = "Cache backings: behaviour + contract suites over every backing, SigV4 known-answer, S3 client, node-id addressing. Run: kagami test --scope CoreKitCacheBackings"
