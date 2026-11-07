@@ -122,3 +122,17 @@ test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
 expected_test_min = 56
 timeout_seconds = 600
 description = "Cache backings: behaviour + contract suites over every backing, SigV4 known-answer, S3 client, node-id addressing. Run: kagami test --scope CoreKitCacheBackings"
+
+[[scopes]]
+# Resource layer, wave 5 (spec d3f8a1b2, BR-RP-13): the backing-agnostic config
+# layer — AppConfig, the ConfigEndpoint contract, the service that fetches once
+# and caches through the cache contract, flags merged from it. The endpoint
+# suite is the one NetKit (PocketBase) and BackendKit (SQL) run over theirs.
+name = "CoreKitConfig"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["AppConfigTests", "AppConfigServiceTests", "ConfigEndpointBackingTests"]
+test_file_patterns = ["**/CoreKitTests/Config/**.swift"]
+expected_test_min = 26
+timeout_seconds = 300
+description = "App config: wire shape, service (fetch, cache, fallback), endpoint contract over each backing. Run: kagami test --scope CoreKitConfig"
