@@ -30,8 +30,14 @@ private final class Counter: @unchecked Sendable {
         return value
     }
 
-    /// The lint's `empty_count` autofix spells `count == 0` as `isEmpty`.
-    var isEmpty: Bool { isEmpty }
+    /// Reads `value`, not `count`: the lint's `empty_count` autofix rewrites
+    /// `count == 0` to `isEmpty`, which here made this getter call itself
+    /// until the stack overflowed and took the whole test process down.
+    var isEmpty: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return value == 0
+    }
 }
 
 private struct PingAssembly: DIAssembly {

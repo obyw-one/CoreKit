@@ -1,4 +1,4 @@
-# .woodpecker/linux-build.yml — prove CoreKit builds on Linux (spec f1a7c3e8 W3, BR-CKL-05)
+# .woodpecker/linux-build.yml — prove CoreKit builds AND passes its tests on Linux (spec f1a7c3e8 W3, BR-CKL-05)
 #
 # The core product (Repository / Cache / DI / JSON / Queue) must build with ZERO
 # Apple framework on Linux. CoreKitUI is Apple-only (SwiftUI) and compiles to an
@@ -26,3 +26,15 @@ steps:
     commands:
       - swift --version
       - swift build   # all targets: CoreKit (core, must be Apple-framework-free) + CoreKitUI (empty on Linux) + CoreKitTestSupport
+
+  # Compiling is not working: the test targets carried a data race that only the
+  # Linux @Sendable Dispatch signature rejects, and .durable fell back to an
+  # unlocked write. So the whole suite runs here too.
+  #
+  # Direct SwiftPM on purpose, the one exception to "kagami only": kagami does not
+  # build on Linux (macOS-only package, private dependencies, CoreKit < 0.11).
+  # Replace this with kagami once it does.
+  linux-test:
+    image: *swift_image
+    commands:
+      - swift test

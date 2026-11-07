@@ -46,16 +46,18 @@ public enum FileIOProfile: Sendable, Equatable {
     /// behavior change for existing consumers.
     case atomic
 
-    /// Cross-process durable write (Darwin).
+    /// Cross-process durable write (Darwin and Linux).
     ///
     /// Steps performed on every `save`:
     ///
     /// 1. Acquires an exclusive POSIX `flock(LOCK_EX)` on a sibling lock
     ///    file (`.<name>.lock`), blocking until the lock is available.
     /// 2. Writes bytes to a per-PID temp file alongside the target.
-    /// 3. Calls `fcntl(F_FULLFSYNC)` on the temp file for power-loss safety.
+    /// 3. Syncs the temp file for power-loss safety: `fcntl(F_FULLFSYNC)` on
+    ///    Darwin, `fsync` on Linux.
     /// 4. Atomically renames temp → target while holding the lock.
-    /// 5. Releases the lock when the lock file descriptor closes.
+    /// 5. Syncs the directory, then releases the lock when the lock file
+    ///    descriptor closes.
     ///
     /// Use when two or more processes (e.g. a daemon and a kernel worker)
     /// may write the same cache file concurrently.
