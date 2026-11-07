@@ -61,7 +61,20 @@ public struct TypedEnvironment: Sendable, Equatable {
     /// `on`, case-insensitive); `false` when unset or anything else.
     public func flag(_ key: some EnvironmentKey) -> Bool {
         guard let raw = self[key] else { return false }
-        return Self.truthy.contains(raw.lowercased())
+        return EnvValue.truthyTokens.contains(raw.lowercased())
+    }
+
+    /// This snapshot over `base`: every variable set (and non-empty) here wins,
+    /// `base` fills the gaps. The shape of "environment over settings" (BR-RP-12):
+    /// the host reads its settings file into one snapshot, the process into
+    /// another, and layers them once at the edge — resolvers then read ONE
+    /// snapshot and never know which layer answered.
+    ///
+    /// An empty value here does not shadow `base`: this type reads empty as
+    /// "not configured", so letting `FOO=` erase a configured setting would
+    /// contradict its own subscript.
+    public func layered(over base: TypedEnvironment) -> TypedEnvironment {
+        TypedEnvironment(base.storage.merging(storage.filter { !$0.value.isEmpty }) { _, mine in mine })
     }
 
     /// Which of `Key.allCases` are set in this snapshot — the audit surface
@@ -81,8 +94,6 @@ public struct TypedEnvironment: Sendable, Equatable {
     }
 
     // MARK: - Private
-
-    private static let truthy: Set<String> = ["1", "true", "yes", "on"]
 
     private func value(named name: String) -> String? {
         guard let raw = storage[name], !raw.isEmpty else { return nil }
