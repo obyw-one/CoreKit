@@ -28,11 +28,16 @@ public enum BootstrapResult: Sendable, Equatable {
 /// Provides the server-driven configuration. Offline with an empty cache there
 /// is none: ``currentConfig`` is `nil` and the app runs on its local defaults —
 /// nothing is invented.
+///
+/// Async throughout, so the implementation can be an actor: the configuration
+/// is state mutated across a network `await`, and an actor is how the compiler
+/// proves that safe. A view that needs a synchronous read mirrors the value
+/// into its own `@MainActor` state after `await`ing it.
 public protocol AppConfigServiceProtocol: Sendable {
 
     /// Loads the cached configuration (if none is in memory), then asks the
     /// endpoint. Call once at launch. Never throws: a failure is logged with its
-    /// cause and reported in the result.
+    /// cause and reported in the result. Concurrent calls share one fetch.
     @discardableResult
     func bootstrap() async -> BootstrapResult
 
@@ -41,15 +46,17 @@ public protocol AppConfigServiceProtocol: Sendable {
     func restore() async
 
     /// The configuration in force (memory, from the endpoint or the cache), or `nil`.
-    var currentConfig: AppConfig? { get }
+    var currentConfig: AppConfig? { get async }
 
     /// Why the app is blocked, if it is.
-    var block: AppBlock? { get }
+    var block: AppBlock? { get async }
 }
 
 extension AppConfigServiceProtocol {
     /// Whether the app must not run (kill switch or maintenance).
-    public var isBlocked: Bool { block != nil }
+    public var isBlocked: Bool {
+        get async { await block != nil }
+    }
 }
 
 // MARK: - AppConfigService
@@ -64,16 +71,19 @@ extension AppConfigServiceProtocol {
 /// A configuration for ANOTHER app is refused, wherever it comes from: a kill
 /// switch applied to the wrong app is an outage.
 ///
-/// `@unchecked Sendable`: the only mutable state is `config`, and it is read
-/// and written exclusively under `lock`.
-public final class AppConfigService: AppConfigServiceProtocol, @unchecked Sendable {
+/// An actor. Its state crosses suspension points (the cache read, the network
+/// fetch, the cache write), so each `await` below re-checks what it assumed:
+/// ``restore()`` never overwrites a configuration a concurrent bootstrap already
+/// installed, and concurrent ``bootstrap()`` calls join the one fetch in flight
+/// instead of racing two.
+public actor AppConfigService: AppConfigServiceProtocol {
 
     private let query: AppConfigQuery
     private let endpoint: any ConfigEndpoint
     private let cache: any RepositoryProtocol<String, AppConfig>
 
-    private let lock = NSLock()
     private var config: AppConfig?
+    private var inFlight: Task<BootstrapResult, Never>?
 
     public init(
         query: AppConfigQuery,
@@ -85,16 +95,17 @@ public final class AppConfigService: AppConfigServiceProtocol, @unchecked Sendab
         self.cache = cache
     }
 
-    public var currentConfig: AppConfig? { lock.withLock { config } }
+    public var currentConfig: AppConfig? { config }
 
-    public var block: AppBlock? { currentConfig?.block }
+    public var block: AppBlock? { config?.block }
 
     public func restore() async {
-        guard currentConfig == nil else { return }
+        guard config == nil else { return }
         do {
             let cached = try await cache.get(query.storageKey)
             guard accepts(cached, from: "cache") else { return }
-            lock.withLock { if config == nil { config = cached } }
+            // Re-check after the suspension: a bootstrap may have installed a fresher one.
+            if config == nil { config = cached }
             AppLog.config.debug("Loaded the app configuration from the cache")
         } catch let error as CacheRepositoryError {
             // A cold or expired cache is the normal first launch, not a failure.
@@ -108,11 +119,22 @@ public final class AppConfigService: AppConfigServiceProtocol, @unchecked Sendab
 
     @discardableResult
     public func bootstrap() async -> BootstrapResult {
+        if let inFlight { return await inFlight.value }
+        let task = Task { await self.performBootstrap() }
+        inFlight = task
+        let result = await task.value
+        inFlight = nil
+        return result
+    }
+
+    // MARK: Private
+
+    private func performBootstrap() async -> BootstrapResult {
         await restore()
         do {
             let fetched = try await endpoint.fetchConfig(query)
             guard accepts(fetched, from: "endpoint") else { return fallbackResult() }
-            lock.withLock { config = fetched }
+            config = fetched
             await remember(fetched)
             AppLog.config.info("Bootstrap succeeded from the endpoint")
             return .fetched
@@ -122,10 +144,8 @@ public final class AppConfigService: AppConfigServiceProtocol, @unchecked Sendab
         }
     }
 
-    // MARK: Private
-
     private func fallbackResult() -> BootstrapResult {
-        currentConfig == nil ? .unavailable : .usingCache
+        config == nil ? .unavailable : .usingCache
     }
 
     private func remember(_ config: AppConfig) async {
@@ -150,28 +170,25 @@ public final class AppConfigService: AppConfigServiceProtocol, @unchecked Sendab
 
 /// A service holding a configuration set by the test: no endpoint, no cache.
 /// By default there is no configuration at all — the app runs on its local
-/// flags, exactly like a first launch offline.
-///
-/// `@unchecked Sendable`: `config` is only touched under `lock`.
-public final class MockAppConfigService: AppConfigServiceProtocol, @unchecked Sendable {
+/// flags, exactly like a first launch offline. An actor, like the real one.
+public actor MockAppConfigService: AppConfigServiceProtocol {
 
-    private let lock = NSLock()
     private var config: AppConfig?
 
     public init(config: AppConfig? = nil) {
         self.config = config
     }
 
-    public var currentConfig: AppConfig? { lock.withLock { config } }
-    public var block: AppBlock? { currentConfig?.block }
+    public var currentConfig: AppConfig? { config }
+    public var block: AppBlock? { config?.block }
 
     public func setConfig(_ config: AppConfig?) {
-        lock.withLock { self.config = config }
+        self.config = config
     }
 
     @discardableResult
     public func bootstrap() async -> BootstrapResult {
-        currentConfig == nil ? .unavailable : .fetched
+        config == nil ? .unavailable : .fetched
     }
 
     public func restore() async {}
@@ -194,12 +211,12 @@ public struct ConfigBackedFeatureFlags<Key: FeatureFlagKey>: FeatureFlagResolvin
     }
 
     /// The flags as they stand now.
-    public var flags: FeatureFlags<Key> {
-        FeatureFlags<Key>(distribution: distribution).merged(with: service.currentConfig?.featureFlags)
+    public func flags() async -> FeatureFlags<Key> {
+        FeatureFlags<Key>(distribution: distribution).merged(with: await service.currentConfig?.featureFlags)
     }
 
-    public func resolve(_ flag: String) -> FlagResolution {
-        flags.resolve(flag)
+    public func resolve(_ flag: String) async -> FlagResolution {
+        await flags().resolve(flag)
     }
 }
 

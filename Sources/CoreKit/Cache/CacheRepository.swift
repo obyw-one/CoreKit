@@ -174,9 +174,8 @@ public struct CacheCodec: Sendable, Equatable {
 /// `CacheRepository<T>("name", invalidateTime:, baseDirectory:, envelope:,
 /// naming:, codec:, ioProfile:)` — builds exactly that and behaves exactly as
 /// before. The backing is swappable (BR-RP-11): pass any
-/// ``SynchronousCacheBacking`` to the `backing:` initialiser (an
-/// ``InMemoryCacheBacking`` for tests, a session cache) and nothing else about
-/// the consumer changes. A backing that can only answer asynchronously — a
+/// ``SynchronousCacheBacking`` to the `backing:` initialiser and nothing else
+/// about the consumer changes. A backing that can only answer asynchronously — a
 /// database, an object store — is used through ``AsyncCacheRepository``, which
 /// speaks the same envelope, TTL and naming over it.
 nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositoryProtocol {

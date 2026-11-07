@@ -34,7 +34,7 @@ struct CacheBackingConformanceTests {
 
     @Test("every shipped backing is in the population")
     func populationIsComplete() {
-        #expect(BackingKind.allCases.count == 7)
+        #expect(BackingKind.allCases.count == 6)
         #expect(CacheRepositoryConformance.Check.allCases.count == 17)
         #expect(CacheBackingConformance.Check.allCases.count == 10)
     }

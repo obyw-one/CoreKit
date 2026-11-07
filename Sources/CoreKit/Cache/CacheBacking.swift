@@ -101,7 +101,7 @@ extension CacheBacking {
 
 // MARK: - SynchronousCacheBacking
 
-/// A backing that can answer without suspending — a local folder, memory.
+/// A backing that can answer without suspending — a local folder.
 ///
 /// ``CacheRepository``, whose API is synchronous across about 140 call
 /// sites, accepts only these: a synchronous call on an async-only backing would

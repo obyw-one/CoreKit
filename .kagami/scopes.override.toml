@@ -133,6 +133,6 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["AppConfigTests", "AppConfigServiceTests", "ConfigEndpointBackingTests"]
 test_file_patterns = ["**/CoreKitTests/Config/**.swift"]
-expected_test_min = 26
+expected_test_min = 28
 timeout_seconds = 300
 description = "App config: wire shape, service (fetch, cache, fallback), endpoint contract over each backing. Run: kagami test --scope CoreKitConfig"

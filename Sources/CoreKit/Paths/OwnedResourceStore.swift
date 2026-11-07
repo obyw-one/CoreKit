@@ -47,13 +47,19 @@ public enum ResourceStoreError: Error, Sendable, CustomStringConvertible {
 ///
 /// Missing is not an error: ``load()`` returns `nil` for a document that was
 /// never written, and ``delete()`` of an absent one is a no-op.
+///
+/// Async, so a store whose state is an actor (``InMemoryResourceStore``) can
+/// conform without a lock. ``OwnedResourceStore`` is plain file I/O and keeps
+/// its synchronous methods, which satisfy the async requirements: code that
+/// holds the concrete type calls it without `await`, code coded against the
+/// protocol awaits.
 public protocol ResourceStoring<Model>: Sendable {
     associatedtype Model: Codable & Sendable
 
-    func load() throws -> Model?
-    func save(_ model: Model) throws
-    func delete() throws
-    func exists() -> Bool
+    func load() async throws -> Model?
+    func save(_ model: Model) async throws
+    func delete() async throws
+    func exists() async -> Bool
 }
 
 // MARK: - OwnedResourceStore
@@ -148,18 +154,18 @@ public struct OwnedResourceStore<Model: Codable & Sendable>: ResourceStoring {
 /// test never touches a disk and never needs a resolver for a store it only
 /// stubs.
 ///
-/// `@unchecked Sendable`: `stored` is read and written only under `lock`.
-public final class InMemoryResourceStore<Model: Codable & Sendable>: ResourceStoring, @unchecked Sendable {
+/// An actor: its one mutable value is serialised by the compiler, with no lock
+/// and no `@unchecked` promise.
+public actor InMemoryResourceStore<Model: Codable & Sendable>: ResourceStoring {
 
-    private let lock = NSLock()
     private var stored: Model?
 
     public init(initial: Model? = nil) {
         stored = initial
     }
 
-    public func load() throws -> Model? { lock.withLock { stored } }
-    public func save(_ model: Model) throws { lock.withLock { stored = model } }
-    public func delete() throws { lock.withLock { stored = nil } }
-    public func exists() -> Bool { lock.withLock { stored != nil } }
+    public func load() async throws -> Model? { stored }
+    public func save(_ model: Model) async throws { stored = model }
+    public func delete() async throws { stored = nil }
+    public func exists() async -> Bool { stored != nil }
 }

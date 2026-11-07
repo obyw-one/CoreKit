@@ -41,7 +41,7 @@ struct CacheRepositoryBackingTests {
         defer { try? scratch.removeScratchDir(directory) }
 
         let local = CacheRepository<ConformancePayload>("swap", baseDirectory: directory)
-        let memory = CacheRepository<ConformancePayload>("swap", backing: InMemoryCacheBacking())
+        let memory = AsyncCacheRepository<ConformancePayload>("swap", backing: InMemoryCacheBacking())
         let remote = AsyncCacheRepository<ConformancePayload>(
             "swap", backing: ObjectStoreCacheBacking(client: InMemoryObjectStoreClient(), bucket: "evidence", node: "mac-a"))
 
@@ -61,7 +61,7 @@ struct CacheRepositoryBackingTests {
         let prod = try container(
             AsyncCacheRepository<ConformancePayload>(
                 "di", backing: ObjectStoreCacheBacking(client: InMemoryObjectStoreClient(), bucket: "evidence", node: "mac-a")))
-        let test = try container(CacheRepository<ConformancePayload>("di", backing: InMemoryCacheBacking()))
+        let test = try container(AsyncCacheRepository<ConformancePayload>("di", backing: InMemoryCacheBacking()))
         for composed in [prod, test] {
             let repository = try composed.resolve((any RepositoryProtocol<String, ConformancePayload>).self)
             try await repository.save("k", data: sample)
@@ -73,7 +73,10 @@ struct CacheRepositoryBackingTests {
 
     @Test("an entry written through one facade is readable through the other over the same backing")
     func facadesShareEntries() async throws {
-        let backing = InMemoryCacheBacking()
+        let scratch = TestScratch.forPackage()
+        let directory = try scratch.makeScratchDir(scope: "backing-facades")
+        defer { try? scratch.removeScratchDir(directory) }
+        let backing = LocalFolderCacheBacking(directory: directory)
         let sync = CacheRepository<ConformancePayload>("shared", invalidateTime: .never, backing: backing)
         let remote = AsyncCacheRepository<ConformancePayload>("shared", invalidateTime: .never, backing: backing)
         try sync.save("from-sync", data: sample)
@@ -190,12 +193,12 @@ struct CacheRepositoryBackingTests {
 
     @Test("a backing with no file write reports the atomic profile, which is what a save guarantees")
     func memoryProfile() {
-        #expect(CacheRepository<ConformancePayload>("m", backing: InMemoryCacheBacking()).ioProfile == .atomic)
+        #expect(CacheRepository<ConformancePayload>("m", backing: FailingBacking()).ioProfile == .atomic)
     }
 
     @Test("both repositories are Sendable without an unchecked escape")
     func sendable() {
-        let sync: any Sendable = CacheRepository<ConformancePayload>("s", backing: InMemoryCacheBacking())
+        let sync: any Sendable = CacheRepository<ConformancePayload>("s", backing: FailingBacking())
         let remote: any Sendable = AsyncCacheRepository<ConformancePayload>("a", backing: InMemoryCacheBacking())
         _ = (sync, remote)
     }
@@ -203,24 +206,25 @@ struct CacheRepositoryBackingTests {
     // MARK: InMemoryCacheBacking
 
     @Test("the in-memory backing stamps entries from its injected clock")
-    func inMemoryClock() throws {
+    func inMemoryClock() async throws {
         let fixed = Date(timeIntervalSince1970: 1_000_000)
         let backing = InMemoryCacheBacking(clock: { fixed })
-        try backing.write(Data("x".utf8), as: "e")
-        #expect(try backing.read("e")?.modified == fixed)
-        #expect(backing.setModified(fixed.addingTimeInterval(-60), for: "e"))
-        #expect(try backing.read("e")?.modified == fixed.addingTimeInterval(-60))
-        #expect(!backing.setModified(nil, for: "absent"))
+        try await backing.put(Data("x".utf8), as: "e")
+        #expect(try await backing.fetch("e")?.modified == fixed)
+        #expect(await backing.setModified(fixed.addingTimeInterval(-60), for: "e"))
+        #expect(try await backing.fetch("e")?.modified == fixed.addingTimeInterval(-60))
+        #expect(await !backing.setModified(nil, for: "absent"))
     }
 
-    @Test("the in-memory backing survives many concurrent writers")
+    @Test("the in-memory backing is an actor: concurrent writers need no lock")
     func inMemoryConcurrency() async throws {
         let backing = InMemoryCacheBacking()
-        await withTaskGroup(of: Void.self) { group in
+        try await withThrowingTaskGroup(of: Void.self) { group in
             for index in 0..<200 {
-                group.addTask { try? backing.write(Data("\(index)".utf8), as: "e\(index)") }
+                group.addTask { try await backing.put(Data("\(index)".utf8), as: "e\(index)") }
             }
+            try await group.waitForAll()
         }
-        #expect(try backing.names().count == 200)
+        #expect(try await backing.entries().count == 200)
     }
 }
