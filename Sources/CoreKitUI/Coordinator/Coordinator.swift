@@ -79,8 +79,9 @@
 //  OnboardingCoordinator from the children array).
 //
 
+#if canImport(SwiftUI)
 import Combine
-import os
+import CoreKit
 import SwiftUI
 
 @MainActor
@@ -202,3 +203,5 @@ open class BaseCoordinator<U: Hashable, P: View>: Coordinator {
         lhs.id == rhs.id
     }
 }
+
+#endif

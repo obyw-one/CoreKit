@@ -58,3 +58,25 @@ test_file_patterns = ["**/CoreKitTests/FileIOProfileTests.swift"]
 expected_test_min = 10
 timeout = 300
 description = "FileIOProfile: per-profile write/read round-trips, durable lock-file lifecycle, concurrent-write integrity. Run: kagami test --scope CoreKitFileIO"
+
+[[scopes]]
+# Linux portability (spec f1a7c3e8, 2026-11-07): the CoreKit product stays free
+# of SwiftUI/Combine/Network/os; the Apple-only surface lives in CoreKitUI.
+name = "CoreKitPortability"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CorePortabilityRatchetTests"]
+test_file_patterns = ["**/CoreKitTests/Portability/**.swift"]
+expected_test_min = 2
+timeout_seconds = 300
+description = "Core portability: no unguarded Apple-only import in Sources/CoreKit, platform-neutral reachability store. Run: kagami test --scope CoreKitPortability"
+
+[[scopes]]
+name = "CoreKitUI"
+test_target_name = "CoreKitUITests"
+package_path = "."
+type_patterns = ["CoreKitUINetworkTests"]
+test_file_patterns = ["**/CoreKitUITests/**.swift"]
+expected_test_min = 1
+timeout_seconds = 300
+description = "CoreKitUI bridge: NetworkStatus.InterfaceType aliases the core type. Run: kagami test --scope CoreKitUI"

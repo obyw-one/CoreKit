@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import os
 #if canImport(Darwin)
 import Darwin
 #endif
@@ -358,12 +357,11 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         var out: [ModelType] = []
         for url in entries {
             let filename = url.lastPathComponent
-            guard filename.hasPrefix(prefix), filename.hasSuffix(".cache") else { continue }
-            guard let data = try? Data(contentsOf: url) else { continue }
-            guard var container = try? JSONDecoder()
-                .decode(CacheContainerModel<ModelType>.self, from: data)
+            guard filename.hasPrefix(prefix), filename.hasSuffix(".cache"), let data = try? Data(contentsOf: url),
+                  var container = try? JSONDecoder()
+                .decode(CacheContainerModel<ModelType>.self, from: data),
+                  (try? cacheIsValid(&container, hasNetwork: true)) == true
             else { continue }
-            guard (try? cacheIsValid(&container, hasNetwork: true)) == true else { continue }
             if let model = try? container.decoded() { out.append(model) }
         }
         return out
@@ -398,7 +396,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         // Check network status for offline support
         let hasNetwork: Bool
         if checkNetworkReachability {
-            let interfaceType = await NetworkStatus.currentInterfaceType
+            let interfaceType = await NetworkReachabilityStore.shared.interfaceType
             hasNetwork = interfaceType != nil && interfaceType != .unknown
         } else {
             hasNetwork = true

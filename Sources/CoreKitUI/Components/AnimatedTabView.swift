@@ -37,6 +37,7 @@
 //
 
 #if canImport(UIKit)
+    import CoreKit
     import SwiftUI
     import UIKit
 
