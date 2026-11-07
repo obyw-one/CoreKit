@@ -67,7 +67,8 @@ let package = Package(
             dependencies: ["CoreKit"]
         ),
         .target(
-            name: "CoreKitTestSupport"
+            name: "CoreKitTestSupport",
+            dependencies: ["CoreKit"]
         ),
         .testTarget(
             name: "CoreKitTests",
