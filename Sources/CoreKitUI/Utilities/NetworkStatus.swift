@@ -6,46 +6,23 @@
 //  Code linked to this article: https://medium.com/@bingkuo/how-to-check-internet-connectivity-69588c7770c4 by Bing Kuo
 //
 
+#if canImport(Network) && canImport(Combine)
 import Combine
+import CoreKit
 import Foundation
 import Network
 
-public extension NetworkStatus {
-    enum InterfaceType: Sendable, Equatable {
-        case unknown
-        case wifi
-        case cellular
-        case ethernet
-        case localhost
-    }
-}
-
-/// A thread-safe container for storing the current network interface type.
-/// This allows nonisolated code to access the network status without requiring main actor isolation.
-actor NetworkStatusStorage {
-    static let shared = NetworkStatusStorage()
-
-    private var _interfaceType: NetworkStatus.InterfaceType?
-
-    private init() {}
-
-    var interfaceType: NetworkStatus.InterfaceType? {
-        _interfaceType
-    }
-
-    func update(_ type: NetworkStatus.InterfaceType?) {
-        _interfaceType = type
-    }
-}
-
 @MainActor
 public class NetworkStatus: ObservableObject {
+    /// Source-compatible alias: the type lives in CoreKit so the core is platform-neutral.
+    public typealias InterfaceType = NetworkInterfaceType
+
     private let monitor = NWPathMonitor()
     @Published public private(set) var interfaceType: InterfaceType? {
         didSet {
             // Cache the value in the actor for nonisolated access
             Task {
-                await NetworkStatusStorage.shared.update(interfaceType)
+                await NetworkReachabilityStore.shared.update(interfaceType)
             }
         }
     }
@@ -86,7 +63,9 @@ public class NetworkStatus: ObservableObject {
     /// This is safe to call from any isolation context.
     nonisolated public static var currentInterfaceType: InterfaceType? {
         get async {
-            await NetworkStatusStorage.shared.interfaceType
+            await NetworkReachabilityStore.shared.interfaceType
         }
     }
 }
+
+#endif

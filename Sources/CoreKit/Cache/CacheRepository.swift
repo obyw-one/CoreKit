@@ -6,9 +6,10 @@
 //
 
 import Foundation
-import os
 #if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
 #endif
 
 // MARK: - Protocol
@@ -358,12 +359,11 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         var out: [ModelType] = []
         for url in entries {
             let filename = url.lastPathComponent
-            guard filename.hasPrefix(prefix), filename.hasSuffix(".cache") else { continue }
-            guard let data = try? Data(contentsOf: url) else { continue }
-            guard var container = try? JSONDecoder()
-                .decode(CacheContainerModel<ModelType>.self, from: data)
+            guard filename.hasPrefix(prefix), filename.hasSuffix(".cache"), let data = try? Data(contentsOf: url),
+                  var container = try? JSONDecoder()
+                .decode(CacheContainerModel<ModelType>.self, from: data),
+                  (try? cacheIsValid(&container, hasNetwork: true)) == true
             else { continue }
-            guard (try? cacheIsValid(&container, hasNetwork: true)) == true else { continue }
             if let model = try? container.decoded() { out.append(model) }
         }
         return out
@@ -398,7 +398,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         // Check network status for offline support
         let hasNetwork: Bool
         if checkNetworkReachability {
-            let interfaceType = await NetworkStatus.currentInterfaceType
+            let interfaceType = await NetworkReachabilityStore.shared.interfaceType
             hasNetwork = interfaceType != nil && interfaceType != .unknown
         } else {
             hasNetwork = true
@@ -446,28 +446,32 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         }
     }
 
-    /// Cross-process durable write: O_EXLOCK + temp-file + F_FULLFSYNC + rename.
+    /// Cross-process durable write: flock + temp-file + sync + rename.
     ///
-    /// A sibling lock file (`.<filename>.lock`) is used as the exclusive-lock
-    /// target so the lock fd stays valid across the rename of the data file.
-    /// `O_EXLOCK` (BSD extension, Darwin only) atomically opens and acquires an
-    /// exclusive flock-equivalent lock; the lock is released when the fd closes.
+    /// A sibling lock file (`.<filename>.lock`) is the exclusive-lock target so
+    /// the lock stays valid across the rename of the data file; it is released
+    /// when the fd closes. Sync is `F_FULLFSYNC` on Darwin, where plain `fsync`
+    /// does not reach the media, and `fsync` elsewhere.
     nonisolated private func durableWrite(_ data: Data, to fileURL: URL) throws {
-#if canImport(Darwin)
+#if canImport(Darwin) || canImport(Glibc)
         let fm = FileManager.default
         let dir = fileURL.deletingLastPathComponent()
-        let lockURL = dir.appendingPathComponent(".\(fileURL.lastPathComponent).lock")
-        let lockPath = lockURL.path
+        let lockPath = dir.appendingPathComponent(".\(fileURL.lastPathComponent).lock").path
 
-        // Open (or create) the lock file with O_EXLOCK — blocks until the
-        // exclusive lock is available (no other fd holds it in another process).
-        // O_EXLOCK is a BSD extension that atomically open+flock(LOCK_EX).
-        let lockFd = Darwin.open(lockPath, O_CREAT | O_WRONLY | O_EXLOCK, S_IRUSR | S_IWUSR)
+        let lockFd = open(lockPath, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR)
         guard lockFd >= 0 else {
-            AppLog.cache.error("Durable write: could not acquire lock on \(lockPath) — errno \(errno)")
+            AppLog.cache.error("Durable write: could not open lock \(lockPath) — errno \(errno)")
             throw CacheRepositoryError.encodedError
         }
-        defer { Darwin.close(lockFd) }   // releases O_EXLOCK automatically
+        defer { close(lockFd) }   // releases the flock automatically
+
+        // Blocks until no other process holds the lock.
+        while flock(lockFd, LOCK_EX) != 0 {
+            guard errno == EINTR else {
+                AppLog.cache.error("Durable write: could not acquire lock on \(lockPath) — errno \(errno)")
+                throw CacheRepositoryError.encodedError
+            }
+        }
 
         // Write to a per-PID temp file alongside the target.
         let pid = ProcessInfo.processInfo.processIdentifier
@@ -476,25 +480,41 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
 
         try data.write(to: tempURL)
 
-        // F_FULLFSYNC: flush write-back cache to physical media (power-loss safety).
-        let tempFd = Darwin.open(tempURL.path, O_RDONLY)
-        if tempFd >= 0 {
-            _ = Darwin.fcntl(tempFd, F_FULLFSYNC)
-            Darwin.close(tempFd)
+        // Flush to physical media (power-loss safety).
+        let tempFd = open(tempURL.path, O_RDONLY)
+        guard tempFd >= 0 else {
+            AppLog.cache.error("Durable write: could not reopen temp file — errno \(errno)")
+            throw CacheRepositoryError.encodedError
+        }
+        defer { close(tempFd) }
+#if canImport(Darwin)
+        // Not every filesystem supports F_FULLFSYNC; fsync is the best it offers.
+        let synced = fcntl(tempFd, F_FULLFSYNC) != -1 || fsync(tempFd) == 0
+#else
+        let synced = fsync(tempFd) == 0
+#endif
+        guard synced else {
+            AppLog.cache.error("Durable write: sync failed — errno \(errno)")
+            throw CacheRepositoryError.encodedError
         }
 
         // Atomic rename while holding the lock — POSIX rename(2) replaces the
-        // target in one operation on APFS / HFS+.
-        guard Darwin.rename(tempURL.path, fileURL.path) == 0 else {
+        // target in one operation.
+        guard rename(tempURL.path, fileURL.path) == 0 else {
             AppLog.cache.error("Durable write: rename failed — errno \(errno)")
             throw CacheRepositoryError.encodedError
         }
-        // Lock released when lockFd closes via defer.
+
+        // The rename lives in the directory entry, so sync that too. Best effort:
+        // some filesystems refuse fsync on a directory.
+        let dirFd = open(dir.path, O_RDONLY)
+        if dirFd >= 0 {
+            _ = fsync(dirFd)
+            close(dirFd)
+        }
 #else
-        // Non-Darwin fallback (no O_EXLOCK / F_FULLFSYNC): plain atomic write.
-        // This path is unreachable given CoreKit's declared platform list
-        // (iOS 17, macOS 14, tvOS 18) but provided for source portability.
-        AppLog.cache.warning("Durable write: Darwin not available — falling back to atomic write")
+        // Not built or tested here (Windows, musl): NOT cross-process safe.
+        AppLog.cache.warning("Durable write: no flock on this platform — falling back to atomic write")
         try data.write(to: fileURL, options: .atomic)
 #endif
     }

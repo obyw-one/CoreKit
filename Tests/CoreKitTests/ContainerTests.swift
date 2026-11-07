@@ -1,6 +1,24 @@
 import XCTest
 @testable import CoreKit
 
+/// Results written from the worker threads below. The lock is what makes the
+/// `@unchecked` true: on Linux `DispatchQueue.async` takes a `@Sendable` closure,
+/// so an unguarded captured `var` does not compile, and it was a data race anyway.
+private final class LockedBox<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    func withValue<Output>(_ body: (inout Value) -> Output) -> Output {
+        lock.lock()
+        defer { lock.unlock() }
+        return body(&value)
+    }
+}
+
 final class ContainerTests: XCTestCase {
     var container: Container!
 
@@ -118,30 +136,29 @@ final class ContainerTests: XCTestCase {
         }
 
         let group = DispatchGroup()
-        var stringResult: String?
-        var intResult: Int?
-        var stringError: Error?
-        var intError: Error?
+        let container: Container = self.container
+        let stringOutcome = LockedBox<Result<String, Error>?>(nil)
+        let intOutcome = LockedBox<Result<Int, Error>?>(nil)
 
         // Resolve on two threads concurrently — should NOT false-detect circular dependency
         group.enter()
         DispatchQueue.global().async {
             defer { group.leave() }
-            do { stringResult = try self.container.resolve(String.self) } catch { stringError = error }
+            let outcome = Result { try container.resolve(String.self) }
+            stringOutcome.withValue { $0 = outcome }
         }
 
         group.enter()
         DispatchQueue.global().async {
             defer { group.leave() }
-            do { intResult = try self.container.resolve(Int.self) } catch { intError = error }
+            let outcome = Result { try container.resolve(Int.self) }
+            intOutcome.withValue { $0 = outcome }
         }
 
         group.wait()
 
-        XCTAssertNil(stringError, "String resolve should not fail: \(stringError?.localizedDescription ?? "")")
-        XCTAssertNil(intError, "Int resolve should not fail: \(intError?.localizedDescription ?? "")")
-        XCTAssertEqual(stringResult, "hello")
-        XCTAssertEqual(intResult, 42)
+        XCTAssertEqual(try stringOutcome.withValue { $0 }?.get(), "hello")
+        XCTAssertEqual(try intOutcome.withValue { $0 }?.get(), 42)
     }
 
     func testConcurrentResolvesOfSameTypeSucceed() throws {
@@ -156,21 +173,24 @@ final class ContainerTests: XCTestCase {
 
         let group = DispatchGroup()
         let iterations = 50
-        var results: [String?] = Array(repeating: nil, count: iterations)
+        let container: Container = self.container
+        let results = LockedBox<[String?]>(Array(repeating: nil, count: iterations))
 
         for i in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
                 defer { group.leave() }
-                results[i] = try? self.container.resolve(String.self)
+                let resolved = try? container.resolve(String.self)
+                results.withValue { $0[i] = resolved }
             }
         }
 
         group.wait()
 
         // All should succeed
+        let resolved = results.withValue { $0 }
         for i in 0..<iterations {
-            XCTAssertEqual(results[i], "shared", "Iteration \(i) should resolve successfully")
+            XCTAssertEqual(resolved[i], "shared", "Iteration \(i) should resolve successfully")
         }
     }
 

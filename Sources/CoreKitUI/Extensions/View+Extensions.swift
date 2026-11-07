@@ -5,6 +5,7 @@
 //  Extracted from WabiSabi — Created by Jeoffrey Thirot on 03/10/2022.
 //
 
+#if canImport(SwiftUI)
 import SwiftUI
 
 // From: https://www.avanderlee.com/swiftui/conditional-view-modifier/
@@ -53,3 +54,5 @@ public extension View {
         return EmptyView()
     }
 }
+
+#endif
