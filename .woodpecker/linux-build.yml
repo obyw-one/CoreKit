@@ -9,7 +9,7 @@
 # step fails here, not in a server deploy.
 
 when:
-  event: [pull_request, push]
+  event: [pull_request, push, manual]  # manual = the "Exécuter un pipeline" button (operator-triggered run)
   branch: [develop, "epic/*", "feat/*", "fix/*", "agent/*", "story/*"]
 
 variables:
