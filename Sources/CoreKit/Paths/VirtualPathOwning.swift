@@ -15,11 +15,16 @@ import Foundation
 /// A scope-kind in the virtual tree: the directory-like home a family of
 /// owners shares (`flows`, `state`, `queue`, `run`, `config`, ...).
 ///
-/// A node is a VALUE, not a case of a closed enum (BR-RP-05): a closed enum of
-/// roots would be a second source of truth for roots that are a
-/// setting (`paths.flows_root`) and could not hold a layout a project grows
-/// into. The scope-kind skeleton a project defines is a set of `static let`
-/// nodes on its own namespace; CoreKit does not know any of them.
+/// ``VirtualNode`` itself is an OPEN value type (BR-RP-05): CoreKit declares no
+/// closed set of roots, because that would be a second source of truth for
+/// roots that are a setting (`paths.flows_root`) and could not hold a layout a
+/// project grows into. Anyone can construct a node, and `.child()` nests them.
+///
+/// A consumer's OWN tree, on the other hand, is a closed set it knows
+/// completely, and is best declared as a `CaseIterable` enum whose cases map to
+/// nodes through a `node` property (`Tree.state.node`). The enum is the
+/// consumer's vocabulary; the node is what CoreKit sees. CoreKit does not know
+/// any of the cases.
 ///
 /// A node is located BELOW the layer's root by default; a layer can be told to
 /// serve a node from somewhere else entirely (the injected `nodeRoots` of
@@ -81,13 +86,13 @@ public struct VirtualPlacement: Hashable, Sendable, Codable, CustomStringConvert
 /// ```swift
 /// // A single resource: the static placement is the whole declaration.
 /// struct PlansLedger: VirtualPathOwning {
-///     static let placement = VirtualPlacement(node: Tree.state, name: "plans.json")
+///     static let placement = VirtualPlacement(node: Tree.state.node, name: "plans.json")
 /// }
 ///
 /// // An id-dependent one: the instance resolver gives the concrete location —
 /// // here the id is a folder AND part of the file name.
 /// struct FlowMetadata: VirtualPathOwning {
-///     static let placement = VirtualPlacement(node: Tree.flows, name: "metadata.json")
+///     static let placement = VirtualPlacement(node: Tree.flows.node, name: "metadata.json")
 ///     let flowID: String
 ///
 ///     func location() throws(VirtualPathError) -> VirtualPath {
