@@ -5,10 +5,10 @@
 name = "CoreKitCache"
 language = "swift"
 package_path = "."
-type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests"]
+type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests", "InMemoryRepositoryTests", "OrderedQueueTests", "ReconcilerTests", "AssemblyResolutionTests", "ContainerWeakScopeTests"]
 test_file_patterns = ["**/CoreKitTests/*.swift"]
 timeout = 300
-expected_test_min = 103
+expected_test_min = 133
 description = "CoreKit cache + container + resolve suites. Run: kagami test --scope CoreKitCache"
 
 [[scopes]]
@@ -27,7 +27,7 @@ description = "Draining + DrainLoop: tick/backoff via FakeDrainClock, quarantine
 name = "CoreKitHash"
 test_target_name = "CoreKitTests"
 type_patterns = ["ContentHashTests"]
-test_file_patterns = ["**/CoreKitTests/Utilities/ContentHashTests.swift"]
+test_file_patterns = ["**/CoreKitTests/Utilities/**.swift"]
 expected_test_min = 6
 timeout = 600
 description = "ContentHash: SHA-256 vectors, format contract, streaming parity. Run: kagami test --scope CoreKitHash"
@@ -54,7 +54,7 @@ name = "CoreKitFileIO"
 test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["FileIOProfileTests"]
-test_file_patterns = ["**/CoreKitTests/FileIOProfileTests.swift"]
+test_file_patterns = ["**/CoreKitTests/FileIO/**.swift"]
 expected_test_min = 10
 timeout = 300
 description = "FileIOProfile: per-profile write/read round-trips, durable lock-file lifecycle, concurrent-write integrity. Run: kagami test --scope CoreKitFileIO"
@@ -119,7 +119,7 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests", "CacheDefaultLocationTests", "CacheDefaultLocationDITests"]
 test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
-expected_test_min = 66
+expected_test_min = 68
 timeout_seconds = 600
 description = "Cache backings: behaviour + contract suites over every backing, SigV4 known-answer, S3 client, node-id addressing. Run: kagami test --scope CoreKitCacheBackings"
 
@@ -159,3 +159,36 @@ test_file_patterns = ["**/CoreKitTests/Docs/**.swift"]
 expected_test_min = 6
 timeout_seconds = 300
 description = "docs/*.md examples compile and behave as written. Run: kagami test --scope CoreKitDocs"
+
+[[scopes]]
+# The Swift 6 runtime-abort ratchet and the TaskDeadline primitive. They sat in no scope's glob, so the gate never ran them.
+name = "CoreKitConcurrency"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CoreKitSleepRatchetTests", "TaskDeadlineTests"]
+test_file_patterns = ["**/CoreKitTests/Concurrency/**.swift"]
+expected_test_min = 7
+timeout_seconds = 300
+description = "TaskDeadline and the no-Task.sleep ratchet. Run: kagami test --scope CoreKitConcurrency"
+
+[[scopes]]
+# The test-support path helpers and the counted-depth #filePath ratchet, plus the target's fixture loader.
+name = "CoreKitPaths"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CountedDepthWalkRatchetTests", "TestPackagePathsTests", "TestSandboxTests", "TestScratchTests"]
+test_file_patterns = ["**/CoreKitTests/Paths/**.swift", "**/CoreKitTests/Support/**.swift"]
+expected_test_min = 19
+timeout_seconds = 300
+description = "TestScratch / TestSandbox / TestPackagePaths and the #filePath-walk ratchet. Run: kagami test --scope CoreKitPaths"
+
+[[scopes]]
+# The ratchet that keeps this registry honest: every test file belongs to exactly one scope.
+name = "CoreKitGate"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["ScopeCoverageRatchetTests"]
+test_file_patterns = ["**/CoreKitTests/Gate/**.swift"]
+expected_test_min = 6
+timeout_seconds = 300
+description = "Every test file under Tests/ is run by exactly one declared scope. Run: kagami test --scope CoreKitGate"

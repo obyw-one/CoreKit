@@ -120,10 +120,18 @@ class Registration<T>: RegistrationProtocol {
             lock.unlock()
             if let existingWeak { return existingWeak }
             let candidate = try factory(resolver)
+            // A weak reference needs a reference type. `as AnyObject` on a value would box it
+            // into a temporary nothing retains, and the "weak" scope would silently behave as
+            // `.transient`; a caller asking for that gets told instead.
+            guard type(of: candidate as Any) is AnyObject.Type, let object = candidate as? AnyObject else {
+                throw ContainerError.invalidRegistration(
+                    "'\(T.self)' is registered with the weak scope but the factory returned a value type "
+                        + "(\(type(of: candidate as Any))); the weak scope holds class instances only — use .transient or .cached")
+            }
             lock.lock()
             defer { lock.unlock() }
             if let raced = weakInstance as? T { return raced }
-            weakInstance = candidate as AnyObject
+            weakInstance = object
             return candidate
         }
     }
@@ -312,6 +320,9 @@ open class Container: Resolver, @unchecked Sendable {
         scope: RegistrationScope,
         factory: @escaping (Resolver) throws -> T
     ) throws -> Container {
+        // The weak scope's class-only rule is enforced where the instance exists, at resolve: in a generic
+        // context Swift cannot tell a concrete struct from a protocol type at registration (measured:
+        // `_canBeClass`, `is AnyClass` and the metatype cast answer the same for both).
         let key = registrationKey(for: type, name: name)
 
         lock.lock()

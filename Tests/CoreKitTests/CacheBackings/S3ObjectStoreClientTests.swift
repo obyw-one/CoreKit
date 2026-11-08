@@ -125,6 +125,35 @@ struct S3ObjectStoreClientTests {
         }
     }
 
+    private static var aliasingKeys: [String] {
+        let slash = PathVocabulary.wireSeparator
+        return [["a", "", "b"].joined(separator: slash), ["a", "b", ""].joined(separator: slash), slash + "a" + slash + "b", ""]
+    }
+
+    @Test("a key with an empty component is refused by every verb and nothing is sent", arguments: S3ObjectStoreClientTests.aliasingKeys)
+    func emptyComponentRefused(_ key: String) async throws {
+        let (client, transport) = try makeSUT()
+        await #expect(throws: S3ObjectStoreError.invalidKey(key)) { try await client.put(Data("x".utf8), key: key, in: Self.bucket) }
+        await #expect(throws: S3ObjectStoreError.invalidKey(key)) { _ = try await client.get(key: key, in: Self.bucket) }
+        await #expect(throws: S3ObjectStoreError.invalidKey(key)) { _ = try await client.exists(key: key, in: Self.bucket) }
+        await #expect(throws: S3ObjectStoreError.invalidKey(key)) { try await client.delete(key: key, in: Self.bucket) }
+        #expect(await transport.requests.isEmpty, "a refused key still reached the store")
+    }
+
+    @Test("a well-formed key round-trips, is listed under the name it was written with, and shares no object with a near spelling")
+    func wellFormedKeyRoundTrips() async throws {
+        let (client, transport) = try makeSUT()
+        let key = self.key("a", "b")
+        try await client.put(Data("one".utf8), key: key, in: Self.bucket)
+        #expect(try await client.get(key: key, in: Self.bucket)?.data == Data("one".utf8))
+        #expect(try await client.keys(withPrefix: "", in: Self.bucket) == [key])
+        for aliasing in Self.aliasingKeys {
+            await #expect(throws: S3ObjectStoreError.self) { try await client.put(Data("two".utf8), key: aliasing, in: Self.bucket) }
+        }
+        #expect(try await client.get(key: key, in: Self.bucket)?.data == Data("one".utf8), "an aliasing put overwrote the object")
+        #expect(await transport.storedKeys(bucket: Self.bucket.rawValue) == [key])
+    }
+
     @Test("an endpoint path prefix is kept in front of the bucket")
     func endpointPathPrefix() async throws {
         let (client, transport) = try makeSUT(endpointPath: Self.separator + "s3")
