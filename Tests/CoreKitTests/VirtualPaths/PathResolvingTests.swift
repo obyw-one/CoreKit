@@ -6,11 +6,12 @@ import Testing
 // MARK: - Fixtures
 
 /// The scope-kind skeleton a project would define — values on a namespace, not a closed enum (BR-RP-05).
-private enum Tree {
+private struct Tree {
     static let flows = VirtualNode("flows")
     static let state = VirtualNode("state")
     static let queue = VirtualNode("queue")
     static let aiRouting = VirtualNode("state").child("ai-routing")
+    private init() {}
 }
 
 /// A single resource: the static placement is the whole declaration.

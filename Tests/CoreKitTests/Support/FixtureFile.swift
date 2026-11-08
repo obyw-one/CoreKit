@@ -4,7 +4,7 @@ import Foundation
 /// A raw wire fixture of the CoreKit test target, loaded by URL from `Tests/CoreKitTests/Fixtures/`.
 /// Raw JSON stays the DECODE fixture (a Codable model cannot test its own wire decoding); the encode half
 /// is asserted next to it so a renamed coding key fails in both directions.
-enum FixtureFile {
+struct FixtureFile {
     static func url(_ name: String) -> URL {
         TestPackagePaths.packageRoot()
             .appending(path: "Tests", directoryHint: .isDirectory)
@@ -16,4 +16,6 @@ enum FixtureFile {
     static func data(_ name: String) throws -> Data {
         try Data(contentsOf: url(name))
     }
+
+    private init() {}
 }

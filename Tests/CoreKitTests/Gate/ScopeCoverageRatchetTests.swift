@@ -14,7 +14,7 @@ private struct DeclaredScope: Equatable {
     let typePatterns: [String]
 }
 
-private enum ScopeRegistry {
+private struct ScopeRegistry {
 
     static func parse(_ text: String) -> [DeclaredScope] {
         text.components(separatedBy: "[[scopes]]").dropFirst().compactMap { block in
@@ -39,6 +39,8 @@ private enum ScopeRegistry {
             Range($0.range(at: 1), in: body).map { String(body[$0]) }
         }
     }
+
+    private init() {}
 }
 
 // MARK: - Census
@@ -49,7 +51,7 @@ private struct Census: Equatable {
     var typesOutsideTheirScope: [String] = []
 }
 
-private enum ScopeCoverage {
+private struct ScopeCoverage {
 
     /// `**/` is any directory prefix (or none), `**` any characters, `*` any characters within one component.
     static func matches(_ pattern: String, _ path: String) -> Bool {
@@ -88,6 +90,8 @@ private enum ScopeCoverage {
         }
         return census
     }
+
+    private init() {}
 }
 
 // MARK: - ScopeCoverageRatchetTests

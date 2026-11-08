@@ -11,9 +11,10 @@ private struct Ledger: Codable, Sendable, Equatable {
     let stamped: Date
 }
 
-private enum Tree {
+private struct Tree {
     static let state = VirtualNode("state")
     static let flows = VirtualNode("flows")
+    private init() {}
 }
 
 private struct LedgerFile: VirtualPathOwning {

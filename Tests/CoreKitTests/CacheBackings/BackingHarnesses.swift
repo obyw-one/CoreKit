@@ -39,7 +39,7 @@ struct BuiltBacking: Sendable {
     }
 }
 
-enum BackingHarnesses {
+struct BackingHarnesses {
 
     static let bucket: BucketName = "evidence"
     static let node: NodeID = "mac-a"
@@ -190,6 +190,8 @@ enum BackingHarnesses {
             tearDown: {},
             storeObjections: { await transport.violations })
     }
+
+    private init() {}
 }
 
 struct MissingValue: Error {}
