@@ -55,7 +55,7 @@ struct CacheDefaultLocationTests {
         let box = try Sandbox()
         defer { box.sweep() }
         let cache = CacheRepository<ConformancePayload>("refused", in: try box.layer(registering: []))
-        func isUnresolvable(_ error: any Error?) -> Bool {
+        func isUnresolvable(_ error: (any Error)?) -> Bool {
             guard case .unresolvable(let name, let reason)? = error as? CacheLocationError else { return false }
             return name == "refused" && reason.contains("CacheDirectory")
         }
