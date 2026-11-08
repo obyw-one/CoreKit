@@ -5,8 +5,9 @@ import Testing
 
 // MARK: - Settings file owner
 
-private enum Tree {
+private struct Tree {
     static let config = VirtualNode("config")
+    private init() {}
 }
 
 /// The configuration as an owned file in the tree: a `.raw` entry, `cat`-able.

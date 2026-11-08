@@ -24,9 +24,10 @@ private func evidenceCache(
     return AsyncCacheRepository<Evidence>("evidence", invalidateTime: .never, envelope: .raw, backing: backing)
 }
 
-private enum Tree {
+private struct Tree {
     static let flows = VirtualNode("flows")
     static let state = VirtualNode("state")
+    private init() {}
 }
 
 private struct PlansLedger: VirtualPathOwning {

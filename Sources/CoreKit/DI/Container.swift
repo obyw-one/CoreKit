@@ -162,10 +162,11 @@ class Registration<T>: RegistrationProtocol {
 /// `@TaskLocal` binds to the task, not the thread: it inherits into child
 /// tasks structurally, is invisible to siblings, and unwinds with the scope
 /// — which is the shape circular-dependency detection actually needs.
-enum ResolutionStack {
+struct ResolutionStack {
     /// Keyed by context so sibling containers never share a stack, even
     /// when they carry the same `name`.
     @TaskLocal static var stacks: [String: [String]] = [:]
+    private init() {}
 }
 
 final class ResolutionContext: Sendable {
