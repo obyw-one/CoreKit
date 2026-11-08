@@ -5,14 +5,19 @@ import Testing
 
 // MARK: - Settings file owner
 
-private struct Tree {
-    static let config = VirtualNode("config")
-    private init() {}
+private enum Tree: CaseIterable {
+    case config
+
+    var node: VirtualNode {
+        switch self {
+        case .config: VirtualNode("config")
+        }
+    }
 }
 
 /// The configuration as an owned file in the tree: a `.raw` entry, `cat`-able.
 private struct AppConfigFile: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.config, name: "app-config")
+    static let placement = VirtualPlacement(node: Tree.config.node, name: "app-config")
     let query: AppConfigQuery
 
     func location() throws(VirtualPathError) -> VirtualPath {

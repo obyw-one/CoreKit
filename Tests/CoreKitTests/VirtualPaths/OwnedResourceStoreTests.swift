@@ -11,18 +11,23 @@ private struct Ledger: Codable, Sendable, Equatable {
     let stamped: Date
 }
 
-private struct Tree {
-    static let state = VirtualNode("state")
-    static let flows = VirtualNode("flows")
-    private init() {}
+private enum Tree: CaseIterable {
+    case state, flows
+
+    var node: VirtualNode {
+        switch self {
+        case .state: VirtualNode("state")
+        case .flows: VirtualNode("flows")
+        }
+    }
 }
 
 private struct LedgerFile: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.state, name: "ledger.json")
+    static let placement = VirtualPlacement(node: Tree.state.node, name: "ledger.json")
 }
 
 private struct FlowLedger: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.flows, name: "ledger.json")
+    static let placement = VirtualPlacement(node: Tree.flows.node, name: "ledger.json")
     let flowID: String
 
     func location() throws(VirtualPathError) -> VirtualPath {
@@ -31,7 +36,7 @@ private struct FlowLedger: VirtualPathOwning {
 }
 
 private struct Unregistered: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.state, name: "unregistered.json")
+    static let placement = VirtualPlacement(node: Tree.state.node, name: "unregistered.json")
 }
 
 private let sample = Ledger(revision: 3, note: "kept — é", stamped: Date(timeIntervalSince1970: 1_700_000_000))
