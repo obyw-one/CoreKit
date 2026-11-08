@@ -117,7 +117,7 @@ description = "Env keys and feature flags: typed env vocabulary, no-fallback rea
 name = "CoreKitCacheBackings"
 test_target_name = "CoreKitTests"
 package_path = "."
-type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests"]
+type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests", "CacheDefaultLocationTests", "CacheDefaultLocationDITests"]
 test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
 expected_test_min = 56
 timeout_seconds = 600
@@ -136,3 +136,15 @@ test_file_patterns = ["**/CoreKitTests/Config/**.swift"]
 expected_test_min = 28
 timeout_seconds = 300
 description = "App config: wire shape, service (fetch, cache, fallback), endpoint contract over each backing. Run: kagami test --scope CoreKitConfig"
+
+[[scopes]]
+# JSON helpers and JSONValue(untyped:) — a number is classified by what it is
+# (round 3 of the resource-layer epic: 0 and 1 were read as booleans).
+name = "CoreKitJSON"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["JSONHelpersTests", "JSONValueUntypedTests"]
+test_file_patterns = ["**/CoreKitTests/JSON/**.swift"]
+expected_test_min = 1
+timeout_seconds = 300
+description = "JSON helpers and JSONValue(untyped:): bool/int/double discrimination through JSONSerialization, native and bridged. Run: kagami test --scope CoreKitJSON"

@@ -7,8 +7,9 @@ import Foundation
 /// primitive class that flakes under kagami (shield finding 1f2d74f7,
 /// 2026-08-07). Foundation-only, same discipline as `RepositoryProtocol`.
 public protocol DrainClock: Sendable {
-    /// Current instant.
-    func now() -> Date
+    /// Current instant. Async so a deterministic test clock can be an actor;
+    /// `LiveDrainClock` keeps a synchronous `now()`, which satisfies this.
+    func now() async -> Date
 
     /// Suspend for `seconds`. Throws `CancellationError` when the
     /// surrounding task is cancelled — `DrainLoop.run()` treats that as
@@ -36,9 +37,9 @@ public struct LiveDrainClock: DrainClock {
 /// Deterministic test clock: virtual time advances by exactly the slept
 /// amount, and every sleep request is recorded so tests can assert the
 /// backoff curve as data (`sleeps == [1, 2, 4, 8]`) instead of racing
-/// timers. Lock-guarded final class so `now()` stays synchronous.
-public final class FakeDrainClock: DrainClock, @unchecked Sendable {
-    private let lock = NSLock()
+/// timers. An actor: its virtual time and the recorded sleeps are shared
+/// state, and the compiler proves them safe without a lock.
+public actor FakeDrainClock: DrainClock {
     private var virtualNow: Date
     private var recorded: [TimeInterval] = []
 
@@ -51,25 +52,18 @@ public final class FakeDrainClock: DrainClock, @unchecked Sendable {
         self.cancelAfterSleeps = cancelAfterSleeps
     }
 
-    public func now() -> Date {
-        lock.lock()
-        defer { lock.unlock() }
-        return virtualNow
+    public func now() async -> Date {
+        virtualNow
     }
 
     public func sleep(for seconds: TimeInterval) async throws {
-        let shouldCancel: Bool = lock.withLock {
-            recorded.append(seconds)
-            virtualNow = virtualNow.addingTimeInterval(seconds)
-            return cancelAfterSleeps.map { recorded.count >= $0 } ?? false
-        }
-        if shouldCancel { throw CancellationError() }
+        recorded.append(seconds)
+        virtualNow = virtualNow.addingTimeInterval(seconds)
+        if let limit = cancelAfterSleeps, recorded.count >= limit { throw CancellationError() }
     }
 
     /// Every sleep duration requested so far, in order.
     public var sleeps: [TimeInterval] {
-        lock.lock()
-        defer { lock.unlock() }
-        return recorded
+        recorded
     }
 }

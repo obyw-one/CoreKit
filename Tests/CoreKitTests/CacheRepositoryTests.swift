@@ -8,17 +8,20 @@ struct TestModel: Codable, Equatable, Sendable {
 
 final class CacheRepositoryTests: XCTestCase {
     var cache: CacheRepository<TestModel>!
+    var scratch: URL!
     let testId = "test-item-\(UUID().uuidString)"
 
     override func setUp() {
         super.setUp()
-        // Back-compat call: existing 2-arg signature must still compile & work.
-        cache = CacheRepository<TestModel>("CacheRepoTests", invalidateTime: .inTime(ttl: 3600))
+        scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CacheRepoTests-default-\(UUID().uuidString)", isDirectory: true)
+        cache = CacheRepository<TestModel>("CacheRepoTests", invalidateTime: .inTime(ttl: 3600), baseDirectory: scratch!)
     }
 
     override func tearDown() {
         // Clean up any cached files
         try? cache.delete(testId)
+        try? FileManager.default.removeItem(at: scratch)
         cache = nil
         super.tearDown()
     }
@@ -84,7 +87,7 @@ final class CacheRepositoryTests: XCTestCase {
 
     func testExpiredCacheIsInvalidated() throws {
         // Create a cache with 0 TTL (immediately expired)
-        let expiredCache = CacheRepository<TestModel>("CacheRepoExpiredTests", invalidateTime: .inTime(ttl: 0))
+        let expiredCache = CacheRepository<TestModel>("CacheRepoExpiredTests", invalidateTime: .inTime(ttl: 0), baseDirectory: scratch!)
         let expiredId = "expired-\(UUID().uuidString)"
         let model = TestModel(id: 4, name: "Expired")
 
@@ -98,7 +101,7 @@ final class CacheRepositoryTests: XCTestCase {
     // MARK: - Never Invalidate
 
     func testNeverInvalidateAlwaysReturns() throws {
-        let neverCache = CacheRepository<TestModel>("CacheRepoNeverTests", invalidateTime: .never)
+        let neverCache = CacheRepository<TestModel>("CacheRepoNeverTests", invalidateTime: .never, baseDirectory: scratch!)
         let neverId = "never-\(UUID().uuidString)"
         let model = TestModel(id: 5, name: "Never Expire")
 
@@ -113,13 +116,16 @@ final class CacheRepositoryTests: XCTestCase {
     // MARK: - Back-compat surface
 
     /// The 2-arg `init(_:invalidateTime:)` shape used all over the ecosystem
-    /// must still compile & default to `.container` envelope + `documentDirectory`.
+    /// must still compile (deprecated) & default to the `.container` envelope.
+    /// Where it stores is covered by `CacheDefaultLocationTests`.
+    @available(*, deprecated, message: "exercises the deprecated initialiser on purpose")
     func testBackCompatTwoArgInitDefaultsToContainerEnvelope() {
         let legacy = CacheRepository<TestModel>("BackCompatDefaults", invalidateTime: .inTime(ttl: 3600))
         XCTAssertEqual(legacy.envelope, .container)
     }
 
-    /// The pre-existing 1-arg default-TTL init must also still compile.
+    /// The pre-existing 1-arg default-TTL init must also still compile (deprecated).
+    @available(*, deprecated, message: "exercises the deprecated initialiser on purpose")
     func testBackCompatOneArgInitStillCompiles() {
         let legacy = CacheRepository<TestModel>("BackCompatOneArg")
         XCTAssertEqual(legacy.envelope, .container)

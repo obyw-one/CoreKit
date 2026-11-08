@@ -170,19 +170,22 @@ public struct CacheCodec: Sendable, Equatable {
 
 /// The synchronous cache: a model per entry, over a ``SynchronousCacheBacking``.
 ///
-/// The default backing is a local folder, and every pre-existing call site —
-/// `CacheRepository<T>("name", invalidateTime:, baseDirectory:, envelope:,
-/// naming:, codec:, ioProfile:)` — builds exactly that and behaves exactly as
-/// before. The backing is swappable (BR-RP-11): pass any
-/// ``SynchronousCacheBacking`` to the `backing:` initialiser and nothing else
-/// about the consumer changes. A backing that can only answer asynchronously — a
-/// database, an object store — is used through ``AsyncCacheRepository``, which
-/// speaks the same envelope, TTL and naming over it.
+/// The usual backing is a local folder, and every call that names its
+/// `baseDirectory:` builds exactly that and behaves exactly as before. The
+/// backing is swappable (BR-RP-11): pass any ``SynchronousCacheBacking`` to the
+/// `backing:` initialiser and nothing else about the consumer changes. A
+/// backing that can only answer asynchronously — a database, an object store —
+/// is used through ``AsyncCacheRepository``, which speaks the same envelope, TTL
+/// and naming over it.
+///
+/// A cache with no directory at all is the deprecated legacy form: see the
+/// deprecated initialiser and ``CacheDirectory``.
 nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositoryProtocol {
     public typealias ModelType = T
 
     private let engine: CacheEntryEngine<T>
-    private let backing: any SynchronousCacheBacking
+    private let location: Result<any SynchronousCacheBacking, CacheLocationError>
+    private let requestedProfile: FileIOProfile
 
     /// Name of the cache — the stem of every legacy entry name.
     public var name: String { engine.name }
@@ -201,31 +204,26 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
 
     /// Write-path profile controlling crash-atomicity and cross-process
     /// exclusion. Default is `.atomic` — EXACTLY today's behavior. A backing
-    /// that has no file write (memory, a database) reports `.atomic`, which is
-    /// what it guarantees: a save is all-or-nothing.
-    /// See ``FileIOProfile`` for per-case guidance.
-    public var ioProfile: FileIOProfile { backing.fileIOProfile ?? .atomic }
+    /// that has no file write reports `.atomic`, which is what it guarantees: a
+    /// save is all-or-nothing. See ``FileIOProfile`` for per-case guidance.
+    public var ioProfile: FileIOProfile {
+        if case .success(let backing) = location { return backing.fileIOProfile ?? .atomic }
+        return requestedProfile
+    }
 
-    /// Create a `CacheRepository` over a local folder.
+    /// Create a `CacheRepository` over a local folder you name.
     ///
     /// - Parameters:
     ///   - name: filename stem — every entry is written as `"<name>-<id>.cache"`.
     ///   - invalidateTime: TTL policy. Default is `.inTime(ttl: 7 days)`.
     ///     See `InvalidateTime` for per-case guidance.
-    ///   - baseDirectory: destination directory for cache files. `nil` (default)
-    ///     keeps the historical behavior (`.documentDirectory`, with a
-    ///     `temporaryDirectory` safe fallback if unavailable). A non-nil URL
-    ///     stores files under that directory and creates it if missing —
-    ///     useful when the caller manages an explicit typed store location
-    ///     (Application Support subdirectory, XDG cache path, workspace-
-    ///     scoped directory, unit-test temp dir). The `nil` default exists for
-    ///     the call sites that predate the injected root; new code passes the
-    ///     directory its path layer resolved, or a ``SynchronousCacheBacking``.
+    ///   - baseDirectory: destination directory for cache files; created if
+    ///     missing. Pass the directory your path layer resolved, an
+    ///     Application Support subdirectory, or a unit-test scratch folder.
     ///   - envelope: on-disk shape. Default is `.container` — the historical
     ///     `CacheContainerModel` metadata envelope. `.raw` writes the model's
     ///     JSON directly so the file is `cat`/`jq`-able. See `EnvelopeMode`
-    ///     for per-case guidance. Existing 2-arg call sites keep `.container`
-    ///     automatically (back-compat preserved).
+    ///     for per-case guidance.
     ///   - naming: filename derivation. `.legacy` (default) keeps the
     ///     historical `"<name>-<id>.cache"`; `.bareId`/`.custom` exist for
     ///     stores whose filename is a contract (see `FileNaming`).
@@ -239,29 +237,78 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     public init(
         _ name: String,
         invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        baseDirectory: URL,
+        envelope: EnvelopeMode = .container,
+        naming: FileNaming = .legacy,
+        codec: CacheCodec = .default,
+        ioProfile: FileIOProfile = .atomic
+    ) {
+        self.init(
+            name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+            requestedProfile: ioProfile,
+            location: .success(LocalFolderCacheBacking(directory: baseDirectory, ioProfile: ioProfile)))
+    }
+
+    /// Create a `CacheRepository` whose directory the injected path layer owns:
+    /// `paths`' root, then the ``CacheDirectory`` node. The layer must have
+    /// ``CacheDirectory`` in its registry; if it cannot resolve it, every
+    /// operation throws ``CacheLocationError/unresolvable(cache:reason:)``
+    /// naming why — no other folder is tried.
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        in paths: any PathResolving,
+        envelope: EnvelopeMode = .container,
+        naming: FileNaming = .legacy,
+        codec: CacheCodec = .default,
+        ioProfile: FileIOProfile = .atomic
+    ) {
+        let location: Result<any SynchronousCacheBacking, CacheLocationError>
+        do {
+            let directory = try paths.url(for: CacheDirectory())
+            location = .success(LocalFolderCacheBacking(directory: directory, ioProfile: ioProfile))
+        } catch {
+            location = .failure(.unresolvable(cache: name, reason: error.description))
+        }
+        self.init(
+            name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+            requestedProfile: ioProfile, location: location)
+    }
+
+    /// The historical initialiser, whose `baseDirectory` could be left out.
+    ///
+    /// Left out (or `nil`), the directory used to be the app's documents folder,
+    /// a default nobody chose. It now resolves through the ``PathResolving``
+    /// registered in the dependency container (``CacheDirectory``), and when
+    /// none is registered every operation throws
+    /// ``CacheLocationError/noPathLayerRegistered(cache:)`` — never a fallback
+    /// folder. A call that passes a real `baseDirectory:` is unchanged, and is
+    /// served by the non-deprecated initialiser above.
+    @available(*, deprecated, message: """
+        Relying on the default cache directory is deprecated. Pass `baseDirectory:` (the directory your path layer resolved),         or `in:` the PathResolving that owns a CacheDirectory. A nil directory now resolves through the PathResolving         registered in DI, and throws CacheLocationError when none is.
+        """)
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
         baseDirectory: URL? = nil,
         envelope: EnvelopeMode = .container,
         naming: FileNaming = .legacy,
         codec: CacheCodec = .default,
         ioProfile: FileIOProfile = .atomic
     ) {
-        // Resolve storage directory with a safe fallback chain — no more `.first!`.
-        let resolved: URL
         if let baseDirectory {
-            resolved = baseDirectory
-        } else if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            resolved = docs
+            self.init(
+                name, invalidateTime: invalidateTime, baseDirectory: baseDirectory, envelope: envelope, naming: naming,
+                codec: codec, ioProfile: ioProfile)
+        } else if let paths = Container.default.resolveOptional((any PathResolving).self) {
+            self.init(
+                name, invalidateTime: invalidateTime, in: paths, envelope: envelope, naming: naming, codec: codec,
+                ioProfile: ioProfile)
         } else {
-            resolved = FileManager.default.temporaryDirectory
-            AppLog.cache.warning("CacheRepository: .documentDirectory unavailable — falling back to temporaryDirectory at \(resolved.path)")
+            self.init(
+                name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+                requestedProfile: ioProfile, location: .failure(.noPathLayerRegistered(cache: name)))
         }
-        self.init(
-            name,
-            invalidateTime: invalidateTime,
-            envelope: envelope,
-            naming: naming,
-            codec: codec,
-            backing: LocalFolderCacheBacking(directory: resolved, ioProfile: ioProfile))
     }
 
     /// Create a `CacheRepository` over an injected synchronous backing
@@ -275,9 +322,24 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         codec: CacheCodec = .default,
         backing: some SynchronousCacheBacking
     ) {
+        self.init(
+            name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+            requestedProfile: backing.fileIOProfile ?? .atomic, location: .success(backing))
+    }
+
+    private init(
+        _ name: String,
+        invalidateTime: InvalidateTime,
+        envelope: EnvelopeMode,
+        naming: FileNaming,
+        codec: CacheCodec,
+        requestedProfile: FileIOProfile,
+        location: Result<any SynchronousCacheBacking, CacheLocationError>
+    ) {
         engine = CacheEntryEngine(
             name: name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec)
-        self.backing = backing
+        self.requestedProfile = requestedProfile
+        self.location = location
     }
 
     // MARK: - CacheRepositoryProtocol
@@ -285,7 +347,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     nonisolated public func exists(_ id: String) -> Bool {
         let entry = engine.entry(for: id)
         do {
-            return try backing.contains(entry)
+            return try backing().contains(entry)
         } catch {
             AppLog.cache.error("Cache exists check failed for \(entry): \(error)")
             return false
@@ -297,6 +359,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     /// decodes each container; entries that fail to decode or have expired are
     /// skipped (and logged) rather than failing the whole enumeration.
     nonisolated public func list() throws -> [ModelType] {
+        let backing = try backing()
         let names: [String]
         do {
             names = try backing.names()
@@ -335,6 +398,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     }
 
     nonisolated public func save(_ id: String, data: ModelType) throws {
+        let backing = try backing()
         let entry = engine.entry(for: id)
         do {
             try backing.write(try engine.encode(data), as: entry)
@@ -345,6 +409,7 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     }
 
     nonisolated public func delete(_ id: String) throws {
+        let backing = try backing()
         let entry = engine.entry(for: id)
         let removed: Bool
         do {
@@ -358,7 +423,13 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
 
     // MARK: - Private
 
+    /// The backing, or the named reason there is none.
+    nonisolated private func backing() throws(CacheLocationError) -> any SynchronousCacheBacking {
+        try location.get()
+    }
+
     nonisolated private func load(_ id: String, hasNetwork: Bool) throws -> ModelType {
+        let backing = try backing()
         let entry = engine.entry(for: id)
         let blob: CacheBlob?
         do {
@@ -373,12 +444,12 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         case .value(let model):
             return model
         case .expired:
-            try invalidate(entry)
+            try invalidate(entry, in: backing)
             throw CacheRepositoryError.noCacheAvailable
         }
     }
 
-    nonisolated private func invalidate(_ entry: String) throws {
+    nonisolated private func invalidate(_ entry: String, in backing: any SynchronousCacheBacking) throws {
         do {
             // An entry that is already gone satisfies the invalidation.
             _ = try backing.remove(entry)

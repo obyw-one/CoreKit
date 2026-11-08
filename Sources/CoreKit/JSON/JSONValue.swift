@@ -26,31 +26,53 @@ public enum JSONValue: Sendable, Equatable {
     /// Best-effort conversion from an untyped JSON scalar/collection
     /// (a `JSONSerialization` product). Types this enum does not model
     /// become `.null`.
+    ///
+    /// A number is classified by what it IS, never by what it can be cast to:
+    /// Foundation bridges every `NSNumber` to `Bool` (and `0`/`1` succeed), so
+    /// asking `as Bool` first turns the JSON integers `0` and `1` into
+    /// booleans. A bridged `NSNumber` is told apart by its `objCType`
+    /// (`c`/`B` is a boolean — `JSONSerialization` produces nothing else with
+    /// that type on Darwin and on Linux, both measured), and a native Swift
+    /// value by its exact dynamic type.
     public init(untyped: Any) {
         switch untyped {
         case let s as String: self = .string(s)
-        case let b as Bool: self = .bool(b)
-        case let i as Int: self = .integer(Int64(i))
-        case let i as Int64: self = .integer(i)
-        case let d as Double: self = .double(d)
-        case let n as NSNumber:
-            // NSNumber straddles Bool/Int/Double — disambiguate on objCType.
-            let type = String(cString: n.objCType)
-            if type == "c" || type == "B" {
-                self = .bool(n.boolValue)
-            } else if type == "q" || type == "l" || type == "i" || type == "s" {
-                self = .integer(n.int64Value)
-            } else {
-                self = .double(n.doubleValue)
-            }
-        case let arr as [Any]:
-            self = .array(arr.map(JSONValue.init(untyped:)))
-        case let dict as [String: Any]:
-            var out: [String: JSONValue] = [:]
-            for (k, v) in dict { out[k] = JSONValue(untyped: v) }
-            self = .object(out)
+        case let arr as [Any]: self = .array(arr.map(JSONValue.init(untyped:)))
+        case let dict as [String: Any]: self = .object(dict.mapValues(JSONValue.init(untyped:)))
         case is NSNull: self = .null
-        default: self = .null
+        default: self = Self.scalar(untyped)
+        }
+    }
+
+    private static func scalar(_ value: Any) -> JSONValue {
+        // Native Swift values first, by exact type: `Bool` and `Int` both bridge
+        // to `NSNumber`, and an `Int8` bridges to a type the NSNumber branch
+        // below would read as a boolean.
+        let dynamicType = type(of: value)
+        if dynamicType == Bool.self, let bool = value as? Bool { return .bool(bool) }
+        if let integer = value as? any FixedWidthInteger { return fromInteger(integer) }
+        if dynamicType == Double.self, let double = value as? Double { return .double(double) }
+        guard let number = value as? NSNumber else { return .null }
+        return fromNumber(number)
+    }
+
+    /// A native integer of any width: an integer while it fits `Int64`, else a double.
+    private static func fromInteger<Integer: FixedWidthInteger>(_ value: Integer) -> JSONValue {
+        if let fits = Int64(exactly: value) { return .integer(fits) }
+        return .double(Double(value))
+    }
+
+    private static func fromNumber(_ number: NSNumber) -> JSONValue {
+        switch String(cString: number.objCType) {
+        case "c", "B":
+            .bool(number.boolValue)
+        case "q", "l", "i", "s", "C", "S", "I", "L":
+            .integer(number.int64Value)
+        case "Q":
+            // Unsigned 64-bit: an integer only while it fits, else a double.
+            fromInteger(number.uint64Value)
+        default:
+            .double(number.doubleValue)
         }
     }
 
@@ -58,12 +80,12 @@ public enum JSONValue: Sendable, Equatable {
     /// back to a caller that must speak `JSONSerialization`.
     public var untyped: Any {
         switch self {
-        case let .string(s): return s
-        case let .integer(i): return NSNumber(value: i)
-        case let .double(d): return NSNumber(value: d)
-        case let .bool(b): return NSNumber(value: b)
-        case let .array(a): return a.map(\.untyped)
-        case let .object(o):
+        case .string(let s): return s
+        case .integer(let i): return NSNumber(value: i)
+        case .double(let d): return NSNumber(value: d)
+        case .bool(let b): return NSNumber(value: b)
+        case .array(let a): return a.map(\.untyped)
+        case .object(let o):
             var out: [String: Any] = [:]
             for (k, v) in o { out[k] = v.untyped }
             return out

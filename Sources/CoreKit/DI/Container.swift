@@ -186,6 +186,22 @@ final class ResolutionContext: Sendable {
 // MARK: - Container
 
 /// Dependency Injection Container with Swinject-style API
+///
+/// **Concurrency — a documented exception, not an oversight.** This class is
+/// `@unchecked Sendable`: its registrations, cached instances and the static
+/// default are shared mutable state guarded by `NSLock`s. It stays that way on
+/// purpose, because every honest alternative breaks the API that ~140 call
+/// sites across the fleet spell:
+///
+/// - an `actor` makes `resolve` `async` (and `@Resolve` impossible, as a
+///   property wrapper cannot suspend);
+/// - an immutable value type cannot hold a `.cached` instance;
+/// - `Synchronization.Mutex` needs macOS 15 / iOS 18, above CoreKit's floors.
+///
+/// The factory never runs under a lock (see `Registration`), so the lock
+/// protects only dictionary and cache bookkeeping. The redesign options and
+/// their migration cost are written up in the pull request that introduced this
+/// note (obyw-one/CoreKit#32); do not "fix" this class piecemeal.
 open class Container: Resolver, @unchecked Sendable {
     // MARK: - Static Properties
 

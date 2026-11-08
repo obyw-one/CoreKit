@@ -19,5 +19,9 @@ import Foundation
 public enum AppIdentity: Sendable {
     /// Main app bundle identifier — must be set by the host app at launch.
     /// Defaults to the main bundle identifier if available, otherwise "CoreKit".
+    ///
+    /// A documented exception to "no `nonisolated(unsafe)`", for the same reason
+    /// as `AppLog.subsystem`: write-once launch configuration read
+    /// synchronously. Set it before any task starts, exactly once.
     nonisolated(unsafe) public static var bundleId: String = Bundle.main.bundleIdentifier ?? "CoreKit"
 }
