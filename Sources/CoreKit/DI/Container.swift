@@ -120,14 +120,17 @@ class Registration<T>: RegistrationProtocol {
             lock.unlock()
             if let existingWeak { return existingWeak }
             let candidate = try factory(resolver)
-            // A weak reference needs a reference type. `as AnyObject` on a value would box it
-            // into a temporary nothing retains, and the "weak" scope would silently behave as
-            // `.transient`; a caller asking for that gets told instead.
-            guard type(of: candidate as Any) is AnyObject.Type, let object = candidate as? AnyObject else {
+            // A weak reference needs a reference type. `type(of: candidate as Any)` returns the
+            // runtime dynamic type — erasing through `Any` is what makes it see `ValueGreeter.Type`
+            // even when T is `any Greeter`. We check the metatype ONCE; if that passes we know
+            // the value is a class and an unconditional `as AnyObject` is safe.
+            let dynamicType = type(of: candidate as Any)
+            guard dynamicType is AnyObject.Type else {
                 throw ContainerError.invalidRegistration(
                     "'\(T.self)' is registered with the weak scope but the factory returned a value type "
-                        + "(\(type(of: candidate as Any))); the weak scope holds class instances only — use .transient or .cached")
+                        + "(\(dynamicType)); the weak scope holds class instances only — use .transient or .cached")
             }
+            let object = candidate as AnyObject
             lock.lock()
             defer { lock.unlock() }
             if let raced = weakInstance as? T { return raced }
