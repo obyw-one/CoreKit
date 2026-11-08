@@ -28,6 +28,10 @@ Files written by the old default live in the documents folder as `<name>-<id>.ca
 ### Fixed
 - `JSONValue(untyped:)`: the integers `0` and `1` came back as booleans, because `as Bool` succeeds on any bridged `NSNumber`. A number is now classified by its type, on macOS and on Linux.
 
+- `Container`: the `.weak` scope held a value type through `as AnyObject`, which boxes into a temporary nothing retains, so the factory re-ran on every resolve (a silent `.transient`). Resolving a `.weak` registration whose instance is not a class now throws `ContainerError.invalidRegistration`. (Registration cannot reject it: in a generic context Swift cannot tell a concrete struct from a protocol type.)
+- `S3ObjectStoreClient`: `a//b`, `a/b/` and `a/b` addressed the same object, because empty key components were dropped. A key with an empty component is now refused with `S3ObjectStoreError.invalidKey` by every verb, before anything is sent.
+- Kagami registry: five test directories and four suites in `CoreKitCache`'s directory were run by no scope. Every file under `Tests/` now belongs to exactly one scope (new `CoreKitConcurrency`, `CoreKitPaths`, `CoreKitGate`), and `ScopeCoverageRatchetTests` fails if a test file or a suite is left out.
+
 ### Changed (concurrency)
 - `AppConfigService`, `MockAppConfigService`, `InMemoryCacheBacking`, `InMemoryResourceStore`, `MockCapacityProber` and `FakeDrainClock` are actors; none is `@unchecked Sendable`.
 - `AppConfigServiceProtocol.currentConfig` / `.block` / `.isBlocked` are `async`; `ResourceStoring` requirements are `async`; `DrainClock.now()` and `DeviceCapacityProbing.probe()` are `async` (a conformer with a synchronous method still satisfies them; only callers through the protocol `await`). `FakeDrainClock.sleeps` and `MockCapacityProber.probeCount` are read with `await`.

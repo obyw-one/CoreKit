@@ -59,6 +59,9 @@ public enum S3ObjectStoreError: Error, Sendable, Equatable, CustomStringConverti
     case malformedResponse(operation: String, detail: String)
     /// The endpoint is not an http(s) URL with a host.
     case unsupportedEndpoint(String)
+    /// The key has an empty component (`a//b`, `a/b/`, a leading separator, or nothing at all). Two such spellings
+    /// would sign the same path and overwrite one object, so the key is refused instead of normalised.
+    case invalidKey(String)
 
     public var description: String {
         switch self {
@@ -68,6 +71,8 @@ public enum S3ObjectStoreError: Error, Sendable, Equatable, CustomStringConverti
             "S3 \(operation) returned a response this client cannot read: \(detail)"
         case .unsupportedEndpoint(let endpoint):
             "S3 endpoint '\(endpoint)' is not an http(s) URL with a host"
+        case .invalidKey(let key):
+            "S3 key '\(key)' has an empty component; keys are non-empty names joined by single separators"
         }
     }
 
@@ -171,7 +176,7 @@ public struct S3ObjectStoreClient: ObjectStoreClient {
         _ method: String, bucket: BucketName, key: String?,
         query: [(name: String, value: String)] = [], body: Data = Data()
     ) async throws -> S3Response {
-        let segments = endpointSegments + [bucket.rawValue] + (key.map(Self.keySegments) ?? [])
+        let segments = try endpointSegments + [bucket.rawValue] + (key.map(Self.keySegments) ?? [])
         let canonicalURI = PathVocabulary.wireSeparator
             + segments.map(AWSSignatureV4.encode).joined(separator: PathVocabulary.wireSeparator)
         let canonicalQuery = AWSSignatureV4.canonicalQuery(query)
@@ -215,8 +220,12 @@ public struct S3ObjectStoreClient: ObjectStoreClient {
         return endpoint.port.map { "\(host):\($0)" } ?? host
     }
 
-    private static func keySegments(_ key: String) -> [String] {
-        key.split(separator: PathVocabulary.wireSeparatorCharacter, omittingEmptySubsequences: true).map(String.init)
+    /// The key's components. An empty component is refused, never dropped: dropping would make `a//b`, `a/b/`
+    /// and `a/b` one object.
+    private static func keySegments(_ key: String) throws -> [String] {
+        let parts = key.split(separator: PathVocabulary.wireSeparatorCharacter, omittingEmptySubsequences: false).map(String.init)
+        guard !parts.isEmpty, !parts.contains(where: \.isEmpty) else { throw S3ObjectStoreError.invalidKey(key) }
+        return parts
     }
 
     private static func amzDate(_ date: Date) -> String {
