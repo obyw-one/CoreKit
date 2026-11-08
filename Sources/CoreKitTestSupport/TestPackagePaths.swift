@@ -23,7 +23,7 @@ public enum TestPackagePaths {
     public static func packageRoot(fromFilePath path: String) -> URL {
         var dir = URL(fileURLWithPath: path).deletingLastPathComponent()
         while dir.path != "/" {
-            if FileManager.default.fileExists(atPath: dir.appendingPathComponent("Package.swift").path) {
+            if FileManager.default.fileExists(atPath: dir.appending(path: "Package.swift", directoryHint: .notDirectory).path) {
                 return dir
             }
             dir = dir.deletingLastPathComponent()
@@ -33,11 +33,11 @@ public enum TestPackagePaths {
 
     /// `<packageRoot>/Sources` for the package that owns `testFile`.
     public static func sourcesRoot(fromTestFile testFile: StaticString = #filePath) -> URL {
-        packageRoot(fromTestFile: testFile).appendingPathComponent("Sources", isDirectory: true)
+        packageRoot(fromTestFile: testFile).appending(path: "Sources", directoryHint: .isDirectory)
     }
 
     /// `<packageRoot>/Sources/<module>` — the tree a per-module ratchet scans.
     public static func sourcesRoot(ofModule module: String, fromTestFile testFile: StaticString = #filePath) -> URL {
-        sourcesRoot(fromTestFile: testFile).appendingPathComponent(module, isDirectory: true)
+        sourcesRoot(fromTestFile: testFile).appending(path: module, directoryHint: .isDirectory)
     }
 }

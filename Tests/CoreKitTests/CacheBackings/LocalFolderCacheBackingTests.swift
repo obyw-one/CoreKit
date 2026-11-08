@@ -20,18 +20,18 @@ struct LocalFolderCacheBackingTests {
     @Test("it creates its directory, nested if need be, and a write lands there")
     func createsDirectory() async throws {
         try await withDirectory { root in
-            let nested = root.appendingPathComponent("a", isDirectory: true).appendingPathComponent("b", isDirectory: true)
+            let nested = root.appending(path: "a", directoryHint: .isDirectory).appending(path: "b", directoryHint: .isDirectory)
             let backing = LocalFolderCacheBacking(directory: nested)
             #expect(FileManager.default.fileExists(atPath: nested.path))
             try backing.write(Data("x".utf8), as: "entry")
-            #expect(FileManager.default.fileExists(atPath: nested.appendingPathComponent("entry").path))
+            #expect(FileManager.default.fileExists(atPath: nested.appending(path: "entry", directoryHint: .notDirectory).path))
         }
     }
 
     @Test("an entry that climbs out of the directory is refused for every verb")
     func climbingEntryRefused() async throws {
         try await withDirectory { root in
-            let backing = LocalFolderCacheBacking(directory: root.appendingPathComponent("inside", isDirectory: true))
+            let backing = LocalFolderCacheBacking(directory: root.appending(path: "inside", directoryHint: .isDirectory))
             let climbing = [PathVocabulary.parentComponent, "outside.json"].joined(separator: Self.separator)
             #expect(throws: CacheBackingError.entryEscapesLocation(entry: climbing)) {
                 try backing.write(Data("x".utf8), as: climbing)
@@ -39,7 +39,7 @@ struct LocalFolderCacheBackingTests {
             #expect(throws: CacheBackingError.entryEscapesLocation(entry: climbing)) { _ = try backing.read(climbing) }
             #expect(throws: CacheBackingError.entryEscapesLocation(entry: climbing)) { _ = try backing.remove(climbing) }
             #expect(throws: CacheBackingError.entryEscapesLocation(entry: climbing)) { _ = try backing.contains(climbing) }
-            #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("outside.json").path),
+            #expect(!FileManager.default.fileExists(atPath: root.appending(path: "outside.json", directoryHint: .notDirectory).path),
                     "the refused write still created a file outside")
         }
     }
@@ -47,12 +47,12 @@ struct LocalFolderCacheBackingTests {
     @Test("a symlink inside the directory that leaves it is refused")
     func symlinkEscapeRefused() async throws {
         try await withDirectory { root in
-            let inside = root.appendingPathComponent("inside", isDirectory: true)
-            let outside = root.appendingPathComponent("outside", isDirectory: true)
+            let inside = root.appending(path: "inside", directoryHint: .isDirectory)
+            let outside = root.appending(path: "outside", directoryHint: .isDirectory)
             let backing = LocalFolderCacheBacking(directory: inside)
             try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
             try FileManager.default.createSymbolicLink(
-                at: inside.appendingPathComponent("link"), withDestinationURL: outside)
+                at: inside.appending(path: "link", directoryHint: .notDirectory), withDestinationURL: outside)
             let through = ["link", "stolen.json"].joined(separator: Self.separator)
             #expect(throws: CacheBackingError.entryEscapesLocation(entry: through)) {
                 try backing.write(Data("x".utf8), as: through)
@@ -60,14 +60,38 @@ struct LocalFolderCacheBackingTests {
         }
     }
 
-    @Test("a nested entry name inside the directory is legal when its folder exists")
-    func nestedEntryAllowed() async throws {
+    @Test("an entry is ONE legal name: a separator-bearing or traversal entry cannot be addressed", arguments: LocalFolderCacheBackingTests.unaddressable)
+    func entryIsOneSegment(_ entry: String) async throws {
         try await withDirectory { root in
             let backing = LocalFolderCacheBacking(directory: root)
-            try FileManager.default.createDirectory(at: root.appendingPathComponent("sub"), withIntermediateDirectories: true)
-            let nested = ["sub", "entry.json"].joined(separator: Self.separator)
-            try backing.write(Data("n".utf8), as: nested)
-            #expect(try backing.read(nested)?.data == Data("n".utf8))
+            #expect(throws: CacheBackingError.entryEscapesLocation(entry: entry)) { try backing.write(Data("x".utf8), as: entry) }
+            #expect(throws: CacheBackingError.entryEscapesLocation(entry: entry)) { _ = try backing.read(entry) }
+            let held = try backing.names()
+            #expect(held.isEmpty)
+        }
+    }
+
+    private static let unaddressable: [String] = {
+        let slash = PathSeparator.posix.rawValue
+        let backslash = PathSeparator.windows.rawValue
+        return [
+            ["sub", "entry.json"].joined(separator: slash),
+            [PathVocabulary.parentComponent, "x"].joined(separator: slash),
+            PathVocabulary.parentComponent,
+            ["a", "b"].joined(separator: backslash),
+        ]
+    }()
+
+    @Test("a name that is not a legal segment is reported as not addressable, not as an escape")
+    func illegalNameIsInvalid() async throws {
+        try await withDirectory { root in
+            let backing = LocalFolderCacheBacking(directory: root)
+            let error = #expect(throws: CacheBackingError.self) { try backing.write(Data("x".utf8), as: "has:colon") }
+            guard case .invalidEntryName(let entry, _)? = error else {
+                Issue.record("expected invalidEntryName, got \(String(describing: error))")
+                return
+            }
+            #expect(entry == "has:colon")
         }
     }
 
@@ -76,7 +100,7 @@ struct LocalFolderCacheBackingTests {
         try await withDirectory { root in
             let backing = LocalFolderCacheBacking(directory: root, ioProfile: .durable)
             try backing.write(Data("x".utf8), as: "kept.json")
-            #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent(".kept.json.lock").path),
+            #expect(FileManager.default.fileExists(atPath: root.appending(path: ".kept.json.lock", directoryHint: .notDirectory).path),
                     "the durable profile should have left its lock file")
             #expect(try backing.names() == ["kept.json"])
         }
@@ -85,7 +109,7 @@ struct LocalFolderCacheBackingTests {
     @Test("names() of a directory that was removed is empty, not an error")
     func missingDirectoryHasNoEntries() async throws {
         try await withDirectory { root in
-            let directory = root.appendingPathComponent("gone", isDirectory: true)
+            let directory = root.appending(path: "gone", directoryHint: .isDirectory)
             let backing = LocalFolderCacheBacking(directory: directory)
             try FileManager.default.removeItem(at: directory)
             #expect(try backing.names().isEmpty)
@@ -112,7 +136,7 @@ struct LocalFolderCacheBackingTests {
             let injected = CacheRepository<ConformancePayload>(
                 "Legacy", backing: LocalFolderCacheBacking(directory: root, ioProfile: .durable))
             try legacy.save("a", data: ConformancePayload(id: 1, name: "x"))
-            #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("Legacy-a.cache").path))
+            #expect(FileManager.default.fileExists(atPath: root.appending(path: "Legacy-a.cache", directoryHint: .notDirectory).path))
             #expect(try injected.get("a") == ConformancePayload(id: 1, name: "x"), "the injected twin cannot read the legacy file")
             #expect(legacy.ioProfile == .durable && injected.ioProfile == .durable)
         }
@@ -125,7 +149,7 @@ struct LocalFolderCacheBackingTests {
             try backing.write(Data("x".utf8), as: "e")
             let written = try #require(try backing.read("e")?.modified)
             let old = written.addingTimeInterval(-86400)
-            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: root.appendingPathComponent("e").path)
+            try FileManager.default.setAttributes([.modificationDate: old], ofItemAtPath: root.appending(path: "e", directoryHint: .notDirectory).path)
             let reread = try #require(try backing.read("e")?.modified)
             #expect(abs(reread.timeIntervalSince(old)) < 2)
         }

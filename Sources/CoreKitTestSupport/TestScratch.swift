@@ -42,23 +42,23 @@ public struct TestScratch: Sendable, Equatable {
     public static func forPackage(fromTestFile testFile: StaticString = #filePath) -> TestScratch {
         TestScratch(
             testsRoot: TestPackagePaths.packageRoot(fromTestFile: testFile)
-                .appendingPathComponent(testsDirectoryName, isDirectory: true)
+                .appending(path: testsDirectoryName, directoryHint: .isDirectory)
         )
     }
 
     /// `<testsRoot>/.test-runs/<runID>/<scope>` — not created.
     public func scratchRoot(scope: String) -> URL {
         testsRoot
-            .appendingPathComponent(Self.runsSegment, isDirectory: true)
-            .appendingPathComponent(runID, isDirectory: true)
-            .appendingPathComponent(scope, isDirectory: true)
+            .appending(path: Self.runsSegment, directoryHint: .isDirectory)
+            .appending(path: runID, directoryHint: .isDirectory)
+            .appending(path: scope, directoryHint: .isDirectory)
     }
 
     /// Creates and returns a fresh, unique directory under
     /// `scratchRoot(scope:)`. Each call yields a distinct directory.
     public func makeScratchDir(scope: String) throws -> URL {
         let dir = scratchRoot(scope: scope)
-            .appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
+            .appending(path: UUID().uuidString.lowercased(), directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -89,8 +89,8 @@ public struct TestScratch: Sendable, Equatable {
     public func isInsideSandbox(_ url: URL) -> Bool {
         let sandbox =
             testsRoot
-                .appendingPathComponent(Self.runsSegment, isDirectory: true)
-                .appendingPathComponent(runID, isDirectory: true)
+                .appending(path: Self.runsSegment, directoryHint: .isDirectory)
+                .appending(path: runID, directoryHint: .isDirectory)
                 .resolvingSymlinksInPath()
                 .standardizedFileURL
                 .pathComponents

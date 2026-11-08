@@ -119,7 +119,7 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests", "CacheDefaultLocationTests", "CacheDefaultLocationDITests"]
 test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
-expected_test_min = 65
+expected_test_min = 66
 timeout_seconds = 600
 description = "Cache backings: behaviour + contract suites over every backing, SigV4 known-answer, S3 client, node-id addressing. Run: kagami test --scope CoreKitCacheBackings"
 
@@ -133,7 +133,7 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["AppConfigTests", "AppConfigServiceTests", "ConfigEndpointBackingTests"]
 test_file_patterns = ["**/CoreKitTests/Config/**.swift"]
-expected_test_min = 28
+expected_test_min = 29
 timeout_seconds = 300
 description = "App config: wire shape, service (fetch, cache, fallback), endpoint contract over each backing. Run: kagami test --scope CoreKitConfig"
 
@@ -145,6 +145,17 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["JSONHelpersTests", "JSONValueUntypedTests"]
 test_file_patterns = ["**/CoreKitTests/JSON/**.swift"]
-expected_test_min = 13
+expected_test_min = 14
 timeout_seconds = 300
 description = "JSON helpers and JSONValue(untyped:): bool/int/double discrimination through JSONSerialization, native and bridged. Run: kagami test --scope CoreKitJSON"
+
+[[scopes]]
+# The code blocks of docs/*.md, compiled and run: a doc whose API moved stops building.
+name = "CoreKitDocs"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["DocsExamplesTests"]
+test_file_patterns = ["**/CoreKitTests/Docs/**.swift"]
+expected_test_min = 6
+timeout_seconds = 300
+description = "docs/*.md examples compile and behave as written. Run: kagami test --scope CoreKitDocs"

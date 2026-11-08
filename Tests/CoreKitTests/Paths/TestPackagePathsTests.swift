@@ -9,7 +9,7 @@ struct TestPackagePathsTests {
     @Test("packageRoot() from this test file resolves to a directory with Package.swift")
     func packageRootFindsMarker() {
         let root = TestPackagePaths.packageRoot()
-        let manifest = root.appendingPathComponent("Package.swift").path
+        let manifest = root.appending(path: "Package.swift", directoryHint: .notDirectory).path
         #expect(FileManager.default.fileExists(atPath: manifest))
     }
 
@@ -22,8 +22,8 @@ struct TestPackagePathsTests {
         let fakePackage = try makeFakePackage()
         defer { try? FileManager.default.removeItem(at: fakePackage) }
 
-        let deepFile = fakePackage.appendingPathComponent("Tests/A/B/C/DeepTest.swift")
-        let shallowFile = fakePackage.appendingPathComponent("Tests/A/ShallowTest.swift")
+        let deepFile = fakePackage.appending(path: "Tests/A/B/C/DeepTest.swift", directoryHint: .notDirectory)
+        let shallowFile = fakePackage.appending(path: "Tests/A/ShallowTest.swift", directoryHint: .notDirectory)
         try FileManager.default.createDirectory(
             at: deepFile.deletingLastPathComponent(), withIntermediateDirectories: true
         )
@@ -47,8 +47,8 @@ struct TestPackagePathsTests {
         let root = TestPackagePaths.packageRoot()
         let expected =
             root
-                .appendingPathComponent("Sources", isDirectory: true)
-                .appendingPathComponent("CoreKit", isDirectory: true)
+                .appending(path: "Sources", directoryHint: .isDirectory)
+                .appending(path: "CoreKit", directoryHint: .isDirectory)
         #expect(TestPackagePaths.sourcesRoot(ofModule: "CoreKit") == expected)
         #expect(FileManager.default.fileExists(atPath: expected.path))
     }
@@ -57,9 +57,9 @@ struct TestPackagePathsTests {
 
     private func makeFakePackage() throws -> URL {
         let base = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("TestPackagePathsTests-\(UUID().uuidString.lowercased())", isDirectory: true)
+            .appending(path: "TestPackagePathsTests-\(UUID().uuidString.lowercased())", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        let manifest = base.appendingPathComponent("Package.swift")
+        let manifest = base.appending(path: "Package.swift", directoryHint: .notDirectory)
         FileManager.default.createFile(atPath: manifest.path, contents: Data("// swift-tools-version: 6.0\n".utf8))
         return base
     }

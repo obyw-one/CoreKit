@@ -10,7 +10,7 @@ struct TestScratchTests {
     func forPackageRoot() {
         let scratch = TestScratch.forPackage()
         let expected = TestPackagePaths.packageRoot()
-            .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
+            .appending(path: TestScratch.testsDirectoryName, directoryHint: .isDirectory)
             .standardizedFileURL
         #expect(scratch.testsRoot == expected)
         #expect(scratch.runID == TestScratch.processRunID)
@@ -34,7 +34,7 @@ struct TestScratchTests {
 
     @Test("two runIDs never share a scratch root for the same scope")
     func runIDsIsolate() {
-        let root = TestPackagePaths.packageRoot().appendingPathComponent(".tests", isDirectory: true)
+        let root = TestPackagePaths.packageRoot().appending(path: ".tests", directoryHint: .isDirectory)
         let one = TestScratch(testsRoot: root, runID: "run-a")
         let two = TestScratch(testsRoot: root, runID: "run-b")
         #expect(one.scratchRoot(scope: "x") != two.scratchRoot(scope: "x"))

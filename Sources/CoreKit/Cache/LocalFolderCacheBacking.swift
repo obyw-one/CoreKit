@@ -87,21 +87,31 @@ public struct LocalFolderCacheBacking: SynchronousCacheBacking {
 
     // MARK: - Location
 
-    /// The file for `entry`, contained in ``directory``.
+    /// The file for `entry`, addressed through the path layer: an entry is ONE
+    /// ``PathSegment``, so a name that climbs, carries a separator or is not a
+    /// legal name cannot be addressed at all — containment is structural, not a
+    /// second guard bolted on after the string is built.
     private func location(of entry: String) throws -> URL {
-        let url = directory.appendingPathComponent(entry)
-        // A single component cannot leave the directory, so the common case
-        // pays for no filesystem walk.
-        if Self.isSingleComponent(entry) { return url }
-        guard PathContainment.isContained(url, in: directory) else {
-            throw CacheBackingError.entryEscapesLocation(entry: entry)
-        }
-        return url
+        try Self.url(of: entry, in: directory, asEntry: entry)
     }
 
-    private static func isSingleComponent(_ entry: String) -> Bool {
-        !entry.isEmpty && entry != PathVocabulary.currentComponent && entry != PathVocabulary.parentComponent
-            && !PathSeparator.allCases.contains { entry.contains($0.rawValue) }
+    private static func url(of name: String, in directory: URL, asEntry entry: String) throws -> URL {
+        do {
+            return VirtualPath(try PathSegment(name)).fileURL(under: directory)
+        } catch {
+            throw map(error, entry: entry)
+        }
+    }
+
+    /// A traversal or a separator is an attempt to leave the directory; any other
+    /// illegal name is simply not addressable.
+    private static func map(_ error: VirtualPathError, entry: String) -> CacheBackingError {
+        switch error {
+        case .traversalSegment, .separatorInSegment:
+            .entryEscapesLocation(entry: entry)
+        default:
+            .invalidEntryName(entry: entry, reason: error.description)
+        }
     }
 
     private func modificationDate(of url: URL) -> Date? {
@@ -126,7 +136,7 @@ public struct LocalFolderCacheBacking: SynchronousCacheBacking {
 #if canImport(Darwin) || canImport(Glibc)
         let fm = FileManager.default
         let dir = fileURL.deletingLastPathComponent()
-        let lockPath = dir.appendingPathComponent(".\(fileURL.lastPathComponent).lock").path
+        let lockPath = try Self.url(of: ".\(fileURL.lastPathComponent).lock", in: dir, asEntry: entry).path
 
         let lockFd = open(lockPath, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR)
         guard lockFd >= 0 else {
@@ -143,7 +153,7 @@ public struct LocalFolderCacheBacking: SynchronousCacheBacking {
 
         // Write to a per-PID temp file alongside the target.
         let pid = ProcessInfo.processInfo.processIdentifier
-        let tempURL = dir.appendingPathComponent(".\(fileURL.lastPathComponent).tmp\(pid)")
+        let tempURL = try Self.url(of: ".\(fileURL.lastPathComponent).tmp\(pid)", in: dir, asEntry: entry)
         defer { try? fm.removeItem(at: tempURL) }
 
         try data.write(to: tempURL)

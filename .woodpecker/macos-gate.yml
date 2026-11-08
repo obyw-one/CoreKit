@@ -2,7 +2,7 @@
 #
 # The Linux pipeline (linux-build.yml) proves the platform-neutral core builds and passes with no Apple framework.
 # This one proves what Linux cannot: the macOS suites run through kagami with `--strict`, and the package still
-# builds for the iOS Simulator and the tvOS Simulator (the platforms Package.swift declares).
+# builds for macOS and the iOS, tvOS and visionOS Simulators (the platforms Package.swift declares).
 #
 # WHERE IT RUNS. On the maintainer's own Mac, through a Woodpecker agent on the `local` backend: the steps run
 # DIRECTLY on that machine as the user who owns the agent, with no container around them. That is why the triggers
@@ -61,23 +61,13 @@ steps:
       - xcodebuild -version
       - kagami --version
 
-  # One kagami invocation per scope declared in .kagami/scopes.override.toml, each with `--strict` (a run that
-  # executed nothing, or fewer tests than the scope's floor, is exit 2, never green).
+  # Every scope declared in .kagami/scopes.override.toml, in ONE invocation: a scope added in a later PR is
+  # gated without anyone remembering to edit this file, so the gate cannot go stale. `--strict` makes a run that
+  # executed nothing, or fewer tests than a scope's floor, exit 2, never green; any red scope exits 1.
   kagami-gate:
     image: bash
     commands:
-      - kagami test --scope CoreKitCache --strict
-      - kagami test --scope CoreKitDrain --strict
-      - kagami test --scope CoreKitHash --strict
-      - kagami test --scope CoreKitCapacity --strict
-      - kagami test --scope CoreKitFileIO --strict
-      - kagami test --scope CoreKitPortability --strict
-      - kagami test --scope CoreKitUI --strict
-      - kagami test --scope CoreKitVirtualPaths --strict
-      - kagami test --scope CoreKitEnvFlags --strict
-      - kagami test --scope CoreKitCacheBackings --strict
-      - kagami test --scope CoreKitConfig --strict
-      - kagami test --scope CoreKitJSON --strict
+      - kagami test --all --strict
 
   # The whole package (every library target, CoreKitUI included) for the iOS Simulator. Derived data and the package
   # checkouts live inside the workspace, so nothing is written to ~/Library/Developer. Simulator builds need no
@@ -91,3 +81,13 @@ steps:
     image: bash
     commands:
       - xcodebuild build -scheme CoreKit-Package -destination 'generic/platform=tvOS Simulator' -derivedDataPath "$$(pwd)/.derived/tvos" CODE_SIGNING_ALLOWED=NO
+
+  visionos-simulator-build:
+    image: bash
+    commands:
+      - xcodebuild build -scheme CoreKit-Package -destination 'generic/platform=visionOS Simulator' -derivedDataPath "$$(pwd)/.derived/visionos" CODE_SIGNING_ALLOWED=NO
+
+  macos-build:
+    image: bash
+    commands:
+      - xcodebuild build -scheme CoreKit-Package -destination 'generic/platform=macOS' -derivedDataPath "$$(pwd)/.derived/macos" CODE_SIGNING_ALLOWED=NO

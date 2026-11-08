@@ -62,7 +62,7 @@ private struct Sandbox {
 
     func sweep() { try? scratch.removeScratchDir(dir) }
 
-    func child(_ name: String) -> URL { dir.appendingPathComponent(name, isDirectory: true) }
+    func child(_ name: String) -> URL { dir.appending(path: name, directoryHint: .isDirectory) }
 }
 
 private func webURL() throws -> URL {
@@ -157,12 +157,12 @@ struct PathResolvingTests {
         defer { box.sweep() }
         let root = box.child("root")
         let outside = box.child("outside")
-        let flowsBase = root.appendingPathComponent("flows", isDirectory: true)
+        let flowsBase = root.appending(path: "flows", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: flowsBase, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         // flows/7f3a -> outside: the id is a perfectly valid segment, the directory it names is not ours.
         try FileManager.default.createSymbolicLink(
-            at: flowsBase.appendingPathComponent("7f3a"), withDestinationURL: outside)
+            at: flowsBase.appending(path: "7f3a", directoryHint: .notDirectory), withDestinationURL: outside)
 
         let paths = try layer(root)
         do {
@@ -183,11 +183,11 @@ struct PathResolvingTests {
         let box = try Sandbox("resolving-t02-dangling")
         defer { box.sweep() }
         let root = box.child("root")
-        let flowsBase = root.appendingPathComponent("flows", isDirectory: true)
+        let flowsBase = root.appending(path: "flows", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: flowsBase, withIntermediateDirectories: true)
         // The target does not exist: a write through this link would CREATE it outside the root.
         try FileManager.default.createSymbolicLink(
-            at: flowsBase.appendingPathComponent("7f3a"), withDestinationURL: box.child("not-yet-created"))
+            at: flowsBase.appending(path: "7f3a", directoryHint: .notDirectory), withDestinationURL: box.child("not-yet-created"))
         let paths = try layer(root)
         #expect(throws: VirtualPathError.self) { try paths.url(for: FlowMetadata(flowID: "7f3a")) }
     }
@@ -198,13 +198,13 @@ struct PathResolvingTests {
         defer { box.sweep() }
         let base = box.child("flow")
         let sibling = box.child("flows")
-        let inside = base.appendingPathComponent("a", isDirectory: true).appendingPathComponent("b.json")
+        let inside = base.appending(path: "a", directoryHint: .isDirectory).appending(path: "b.json", directoryHint: .notDirectory)
         #expect(PathContainment.isContained(base, in: base))
         #expect(PathContainment.isContained(inside, in: base))
         // `.../flows` is textually prefixed by `.../flow` — and is NOT inside it.
         #expect(!PathContainment.isContained(sibling, in: base))
         #expect(!PathContainment.isContained(base.deletingLastPathComponent(), in: base))
-        let climbing = base.appendingPathComponent(PathVocabulary.parentComponent).appendingPathComponent("flows")
+        let climbing = base.appending(path: PathVocabulary.parentComponent, directoryHint: .notDirectory).appending(path: "flows", directoryHint: .notDirectory)
         #expect(!PathContainment.isContained(climbing, in: base))
         #expect(throws: VirtualPathError.escapesRoot(path: sibling.path, root: base.path)) {
             try PathContainment.require(sibling, in: base)

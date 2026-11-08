@@ -11,7 +11,7 @@ struct TestSandboxTests {
     private static let testsRoot =
         TestPackagePaths
             .packageRoot()
-            .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
+            .appending(path: TestScratch.testsDirectoryName, directoryHint: .isDirectory)
 
     @Test("make(under:) mints a directory under <testsRoot>/.test-runs/<uuid>/ and creates it")
     func makeMintsAndCreatesRoot() throws {
@@ -28,7 +28,7 @@ struct TestSandboxTests {
     func sweepRemovesTheMintedSubtree() throws {
         let sandbox = try TestSandbox.make(under: Self.testsRoot)
         // Populate it — sweep must take the whole subtree with it.
-        let child = sandbox.root.appendingPathComponent("payload.txt")
+        let child = sandbox.root.appending(path: "payload.txt", directoryHint: .notDirectory)
         FileManager.default.createFile(atPath: child.path, contents: Data("payload".utf8))
         #expect(FileManager.default.fileExists(atPath: child.path))
 

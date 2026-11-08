@@ -20,6 +20,9 @@ let package = Package(
         //
         // Apple TV 4K 3rd gen ships tvOS 26+, so 18.0 costs no reachability.
         .tvOS(.v18),
+        // visionOS: what works on iOS works on visionOS. 1.0 is the visionOS release that matches
+        // iOS 17, the iOS floor above.
+        .visionOS(.v1),
     ],
     products: [
         .library(
@@ -72,7 +75,8 @@ let package = Package(
         ),
         .testTarget(
             name: "CoreKitTests",
-            dependencies: ["CoreKit", "CoreKitTestSupport"]
+            dependencies: ["CoreKit", "CoreKitTestSupport"],
+            exclude: ["Fixtures", "Paths/Fixtures"]
         ),
         .testTarget(
             name: "CoreKitUITests",

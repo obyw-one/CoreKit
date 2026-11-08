@@ -116,12 +116,23 @@ public struct PathSegment: Hashable, Sendable, Codable, CustomStringConvertible,
     private static let dash: Character = "-"
     private static let reservedScalars = Set("<>:\"|?*".unicodeScalars)
 
+    /// Whether `scalar` can never appear in a segment: a control character
+    /// (below U+0020), DEL, one of the Windows-reserved characters `<>:"|?*`, or
+    /// a separator of any known platform. Checked at construction because a
+    /// segment that is wrong on ANY target platform or object store is wrong
+    /// everywhere: it is refused where the name is made, not where it is used.
     private static func forbidden(_ scalar: Unicode.Scalar) -> Bool {
         scalar.value < 0x20 || scalar.value == 0x7F
             || reservedScalars.contains(scalar)
             || PathSeparator.allCases.contains { $0.rawValue.unicodeScalars.contains(scalar) }
     }
 
+    /// The whole rule set, applied once when a segment is built: non-empty; not
+    /// `.` or `..` (traversal); at most 255 UTF-8 bytes; no ``forbidden(_:)``
+    /// scalar; no leading or trailing whitespace and no trailing dot (names a
+    /// platform would silently rewrite, so that two names become one).
+    /// Enforcing it at construction makes every `PathSegment` valid by type, so
+    /// nothing downstream has to re-check it or can forget to.
     private static func validate(_ raw: String) throws(VirtualPathError) {
         guard !raw.isEmpty else { throw .emptySegment }
         guard raw != PathVocabulary.currentComponent, raw != PathVocabulary.parentComponent else {

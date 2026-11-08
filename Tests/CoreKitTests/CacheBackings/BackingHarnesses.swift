@@ -90,7 +90,7 @@ enum BackingHarnesses {
         let backing = LocalFolderCacheBacking(directory: directory, ioProfile: profile)
 
         let age: @Sendable (String, TimeInterval) async throws -> Void = { entry, seconds in
-            let url = directory.appendingPathComponent(entry)
+            let url = directory.appending(path: entry, directoryHint: .notDirectory)
             let current = try FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date ?? Date()
             try FileManager.default.setAttributes(
                 [.modificationDate: current.addingTimeInterval(-seconds)], ofItemAtPath: url.path)

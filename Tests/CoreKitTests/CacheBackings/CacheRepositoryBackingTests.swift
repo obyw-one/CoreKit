@@ -159,7 +159,7 @@ struct CacheRepositoryBackingTests {
         let scratch = TestScratch.forPackage()
         let root = try scratch.makeScratchDir(scope: "backing-climb")
         defer { try? scratch.removeScratchDir(root) }
-        let inside = root.appendingPathComponent("inside", isDirectory: true)
+        let inside = root.appending(path: "inside", directoryHint: .isDirectory)
         let repository = CacheRepository<ConformancePayload>(
             "climb", invalidateTime: .never, baseDirectory: inside, envelope: .raw, naming: .bareId(ext: "json"))
         let climbing = [PathVocabulary.parentComponent, "outside"].joined(separator: PathVocabulary.wireSeparator)
@@ -169,7 +169,7 @@ struct CacheRepositoryBackingTests {
         } catch {
             #expect(String(describing: error) == String(describing: CacheRepositoryError.encodedError))
         }
-        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("outside.json").path))
+        #expect(!FileManager.default.fileExists(atPath: root.appending(path: "outside.json", directoryHint: .notDirectory).path))
         #expect(!repository.exists(climbing))
     }
 
@@ -178,7 +178,7 @@ struct CacheRepositoryBackingTests {
     @Test("the legacy surface is unchanged: name, envelope, naming, codec and profile")
     func legacySurface() {
         let repository = CacheRepository<ConformancePayload>(
-            "surface", invalidateTime: .never, baseDirectory: FileManager.default.temporaryDirectory,
+            "surface", invalidateTime: .never, baseDirectory: TestScratch.forPackage().scratchRoot(scope: "cache-tests"),
             envelope: .raw, naming: .bareId(ext: "json"), codec: .humanReadable, ioProfile: .plain)
         #expect(repository.name == "surface")
         #expect(repository.envelope == .raw)

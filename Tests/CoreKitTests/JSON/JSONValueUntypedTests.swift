@@ -1,4 +1,5 @@
 import CoreKit
+import CoreKitTestSupport
 import Foundation
 import Testing
 
@@ -41,13 +42,19 @@ struct JSONValueUntypedTests {
 
     @Test("a mixed document keeps every kind apart")
     func mixedDocument() throws {
-        let tree = try JSONSerialization.jsonObject(
-            with: Data(#"{"flag":true,"off":false,"zero":0,"one":1,"ratio":1.0,"name":"x","none":null,"list":[1,true,2.5]}"#.utf8))
+        let tree = try JSONSerialization.jsonObject(with: FixtureFile.data("json-untyped-mixed.json"))
         #expect(JSONValue(untyped: tree) == .object([
             "flag": .bool(true), "off": .bool(false), "zero": .integer(0), "one": .integer(1),
-            "ratio": .double(1.0), "name": .string("x"), "none": .null,
+            "ratio": .double(1.5), "name": .string("x"), "none": .null,
             "list": .array([.integer(1), .bool(true), .double(2.5)]),
         ]))
+    }
+
+    @Test("encode half: the fixture's value, written back through untyped and re-read, is the same value")
+    func fixtureRoundTripsBothWays() throws {
+        let value = JSONValue(untyped: try JSONSerialization.jsonObject(with: FixtureFile.data("json-untyped-mixed.json")))
+        let written = try JSONSerialization.data(withJSONObject: value.untyped)
+        #expect(JSONValue(untyped: try JSONSerialization.jsonObject(with: written)) == value)
     }
 
     @Test("native Swift values are classified by their own type")
