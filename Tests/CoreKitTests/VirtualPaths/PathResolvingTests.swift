@@ -5,23 +5,27 @@ import Testing
 
 // MARK: - Fixtures
 
-/// The scope-kind skeleton a project would define — values on a namespace, not a closed enum (BR-RP-05).
-private struct Tree {
-    static let flows = VirtualNode("flows")
-    static let state = VirtualNode("state")
-    static let queue = VirtualNode("queue")
-    static let aiRouting = VirtualNode("state").child("ai-routing")
-    private init() {}
+private enum Tree: CaseIterable {
+    case flows, state, queue, aiRouting
+
+    var node: VirtualNode {
+        switch self {
+        case .flows: VirtualNode("flows")
+        case .state: VirtualNode("state")
+        case .queue: VirtualNode("queue")
+        case .aiRouting: VirtualNode("state").child("ai-routing")
+        }
+    }
 }
 
 /// A single resource: the static placement is the whole declaration.
 private struct PlansLedger: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.state, name: "plans.json")
+    static let placement = VirtualPlacement(node: Tree.state.node, name: "plans.json")
 }
 
 /// An id-dependent resource: the id is a folder AND part of the file name (BR-RP-02, T-03).
 private struct FlowMetadata: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.flows, name: "metadata.json")
+    static let placement = VirtualPlacement(node: Tree.flows.node, name: "metadata.json")
     let flowID: String
 
     func location() throws(VirtualPathError) -> VirtualPath {
@@ -34,7 +38,7 @@ private enum QueueFile: String, CaseIterable, VirtualPathOwning {
     case fastPending = "fast-pending.jsonl"
     case retryPending = "retry-pending.jsonl"
 
-    static let placement = VirtualPlacement(node: Tree.queue, name: "queue-file")
+    static let placement = VirtualPlacement(node: Tree.queue.node, name: "queue-file")
 
     func location() throws(VirtualPathError) -> VirtualPath {
         VirtualPath(try PathSegment(rawValue))
@@ -48,7 +52,7 @@ private struct ImpostorLedger: VirtualPathOwning {
 
 /// Never added to any tree.
 private struct Stranger: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.state, name: "stranger.json")
+    static let placement = VirtualPlacement(node: Tree.state.node, name: "stranger.json")
 }
 
 private let allOwners: [any VirtualPathOwning.Type] = [PlansLedger.self, FlowMetadata.self, QueueFile.self]
@@ -245,7 +249,7 @@ struct PathResolvingTests {
         #expect(names == ["fast-pending.jsonl", "retry-pending.jsonl"])
         for file in QueueFile.allCases {
             #expect(try paths.url(for: file).deletingLastPathComponent().standardizedFileURL.path
-                == paths.base(of: Tree.queue).standardizedFileURL.path)
+                == paths.base(of: Tree.queue.node).standardizedFileURL.path)
         }
     }
 
@@ -272,8 +276,8 @@ struct PathResolvingTests {
         #expect(registry.entries.map(\.placement) == [PlansLedger.placement, QueueFile.placement])
         #expect(registry.contains(PlansLedger.self))
         #expect(!registry.contains(Stranger.self))
-        #expect(registry.entries(on: Tree.queue).count == 1)
-        #expect(registry.entries(on: Tree.flows).isEmpty)
+        #expect(registry.entries(on: Tree.queue.node).count == 1)
+        #expect(registry.entries(on: Tree.flows.node).isEmpty)
     }
 
     @Test("an owner never added to the tree is refused by name — no second, invisible tree")
@@ -307,7 +311,7 @@ struct PathResolvingTests {
         let box = try Sandbox("resolving-node-root")
         defer { box.sweep() }
         let flowsElsewhere = box.child("elsewhere")
-        let paths = try layer(box.child("root"), nodeRoots: [Tree.flows: flowsElsewhere])
+        let paths = try layer(box.child("root"), nodeRoots: [Tree.flows.node: flowsElsewhere])
         let url = try paths.url(for: FlowMetadata(flowID: "7f3a"))
         #expect(PathContainment.isContained(url, in: flowsElsewhere))
         #expect(!PathContainment.isContained(url, in: paths.root))
@@ -315,6 +319,18 @@ struct PathResolvingTests {
         #expect(PathContainment.isContained(try paths.url(for: PlansLedger()), in: paths.root))
         // The virtual path — what an object store sees — does not change.
         #expect(try paths.virtualPath(for: FlowMetadata(flowID: "7f3a")).hasPrefix(VirtualPath(PathSegment(stringLiteral: "flows"))))
+    }
+
+    @Test("every declared tree node is distinct and resolves under the root")
+    func declaredTreeNodesAreDistinctAndContained() throws {
+        let box = try Sandbox("resolving-tree-cases")
+        defer { box.sweep() }
+        let paths = try layer(box.child("root"))
+        let nodes = Tree.allCases.map(\.node)
+        #expect(Set(nodes).count == nodes.count)
+        for node in nodes {
+            #expect(PathContainment.isContained(paths.base(of: node), in: paths.root))
+        }
     }
 
     @Test("resolution is resolve-only: it creates nothing")
@@ -335,7 +351,7 @@ struct PathResolvingTests {
         let box = try Sandbox("resolving-file-url")
         defer { box.sweep() }
         #expect(throws: VirtualPathError.rootNotFileURL(web.absoluteString)) {
-            try PathLayer(root: box.dir, nodeRoots: [Tree.flows: web])
+            try PathLayer(root: box.dir, nodeRoots: [Tree.flows.node: web])
         }
     }
 
@@ -369,7 +385,7 @@ struct PathResolvingTests {
             ])
         let paths = try PathLayer(configuration: configuration, registry: VirtualPathRegistry(allOwners))
         #expect(PathContainment.isContained(try paths.url(for: FlowMetadata(flowID: "1")), in: box.child("flows-root")))
-        #expect(paths.base(of: Tree.aiRouting).lastPathComponent == "routing")
+        #expect(paths.base(of: Tree.aiRouting.node).lastPathComponent == "routing")
         #expect(PathContainment.isContained(try paths.url(for: PlansLedger()), in: box.child("root")))
     }
 

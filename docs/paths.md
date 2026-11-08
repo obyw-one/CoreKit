@@ -7,19 +7,25 @@ A typed thing **owns its path**; nobody else restates it. Production and test di
 ```swift
 import CoreKit
 
-enum Tree {
-    static let flows = VirtualNode("flows")
-    static let state = VirtualNode("state")
+enum Tree: CaseIterable {
+    case flows, state
+
+    var node: VirtualNode {
+        switch self {
+        case .flows: VirtualNode("flows")
+        case .state: VirtualNode("state")
+        }
+    }
 }
 
 /// A single resource: the static placement is the whole declaration.
 struct PlansLedger: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.state, name: "plans.json")
+    static let placement = VirtualPlacement(node: Tree.state.node, name: "plans.json")
 }
 
 /// An id-dependent one: the id is a folder AND part of the file name.
 struct FlowMetadata: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.flows, name: "metadata.json")
+    static let placement = VirtualPlacement(node: Tree.flows.node, name: "metadata.json")
     let flowID: String
 
     func location() throws(VirtualPathError) -> VirtualPath {
