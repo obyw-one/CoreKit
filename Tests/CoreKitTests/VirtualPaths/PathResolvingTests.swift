@@ -58,7 +58,7 @@ private struct Sandbox {
         dir = try scratch.makeScratchDir(scope: scope)
     }
 
-    func sweep() { try? scratch.removeScratchDir(dir) }
+    func sweep() { scratch.sweep(dir) }
 
     func child(_ name: String) -> URL { dir.appending(path: name, directoryHint: .isDirectory) }
 }

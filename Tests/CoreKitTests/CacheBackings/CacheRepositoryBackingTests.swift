@@ -38,7 +38,7 @@ struct CacheRepositoryBackingTests {
     func consumerUnchangedBySwap() async throws {
         let scratch = TestScratch.forPackage()
         let directory = try scratch.makeScratchDir(scope: "backing-swap")
-        defer { try? scratch.removeScratchDir(directory) }
+        defer { scratch.sweep(directory) }
 
         let local = CacheRepository<ConformancePayload>("swap", baseDirectory: directory)
         let memory = AsyncCacheRepository<ConformancePayload>("swap", backing: InMemoryCacheBacking())
@@ -75,7 +75,7 @@ struct CacheRepositoryBackingTests {
     func facadesShareEntries() async throws {
         let scratch = TestScratch.forPackage()
         let directory = try scratch.makeScratchDir(scope: "backing-facades")
-        defer { try? scratch.removeScratchDir(directory) }
+        defer { scratch.sweep(directory) }
         let backing = LocalFolderCacheBacking(directory: directory)
         let sync = CacheRepository<ConformancePayload>("shared", invalidateTime: .never, backing: backing)
         let remote = AsyncCacheRepository<ConformancePayload>("shared", invalidateTime: .never, backing: backing)
@@ -89,7 +89,7 @@ struct CacheRepositoryBackingTests {
     func migratingLocalToObjectStore() async throws {
         let scratch = TestScratch.forPackage()
         let directory = try scratch.makeScratchDir(scope: "backing-migrate")
-        defer { try? scratch.removeScratchDir(directory) }
+        defer { scratch.sweep(directory) }
 
         let local = LocalFolderCacheBacking(directory: directory)
         let legacy = CacheRepository<ConformancePayload>("Moved", invalidateTime: .never, baseDirectory: directory)
@@ -158,7 +158,7 @@ struct CacheRepositoryBackingTests {
     func climbingIdIsRefused() async throws {
         let scratch = TestScratch.forPackage()
         let root = try scratch.makeScratchDir(scope: "backing-climb")
-        defer { try? scratch.removeScratchDir(root) }
+        defer { scratch.sweep(root) }
         let inside = root.appending(path: "inside", directoryHint: .isDirectory)
         let repository = CacheRepository<ConformancePayload>(
             "climb", invalidateTime: .never, baseDirectory: inside, envelope: .raw, naming: .bareId(ext: "json"))

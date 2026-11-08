@@ -74,7 +74,7 @@ struct DocsExamplesTests {
     func swapping() async throws {
         let scratch = TestScratch.forPackage()
         let directory = try scratch.makeScratchDir(scope: "docs-cache")
-        defer { try? scratch.removeScratchDir(directory) }
+        defer { scratch.sweep(directory) }
         let local = CacheRepository<Evidence>("evidence", invalidateTime: .never, baseDirectory: directory)
         let memory = AsyncCacheRepository<Evidence>("evidence", invalidateTime: .never, backing: InMemoryCacheBacking())
         try await record(Evidence(wave: 1), in: local)
@@ -98,7 +98,7 @@ struct DocsExamplesTests {
     func paths() throws {
         let scratch = TestScratch.forPackage()
         let root = try scratch.makeScratchDir(scope: "docs-paths")
-        defer { try? scratch.removeScratchDir(root) }
+        defer { scratch.sweep(root) }
         let registry = try VirtualPathRegistry([PlansLedger.self, FlowMetadata.self])
         let layer = try PathLayer(root: root, registry: registry)
         #expect(try layer.url(for: PlansLedger()).lastPathComponent == "plans.json")
@@ -134,7 +134,7 @@ struct DocsExamplesTests {
     func config() async throws {
         let scratch = TestScratch.forPackage()
         let directory = try scratch.makeScratchDir(scope: "docs-config")
-        defer { try? scratch.removeScratchDir(directory) }
+        defer { scratch.sweep(directory) }
         let query = AppConfigQuery(appId: "demo", environment: "prod")
         let settings = CacheRepository<AppConfig>(
             "settings", invalidateTime: .never, baseDirectory: directory, envelope: .raw, naming: .bareId(ext: "json"))

@@ -22,8 +22,8 @@ struct TestScratchTests {
         let a = try scratch.makeScratchDir(scope: "test-scratch-tests")
         let b = try scratch.makeScratchDir(scope: "test-scratch-tests")
         defer {
-            try? scratch.removeScratchDir(a)
-            try? scratch.removeScratchDir(b)
+            scratch.sweep(a)
+            scratch.sweep(b)
         }
         #expect(a != b)
         #expect(FileManager.default.fileExists(atPath: a.path))
@@ -60,5 +60,22 @@ struct TestScratchTests {
             }
             #expect(!scratch.isInsideSandbox(url))
         }
+    }
+
+    @Test("sweep reports a refused cleanup instead of swallowing it, and stays silent on a clean one")
+    func sweepReportsFailures() throws {
+        let scratch = TestScratch.forPackage()
+        let mine = try scratch.makeScratchDir(scope: "test-scratch-tests")
+        var clean: [String] = []
+        scratch.sweep(mine) { clean.append($0) }
+        #expect(clean.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: mine.path))
+
+        let outside = TestPackagePaths.packageRoot()
+        var refused: [String] = []
+        scratch.sweep(outside) { refused.append($0) }
+        #expect(refused.count == 1)
+        #expect(refused.first?.contains(outside.path) == true)
+        #expect(FileManager.default.fileExists(atPath: outside.path))
     }
 }

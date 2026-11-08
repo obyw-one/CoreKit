@@ -178,7 +178,7 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["CountedDepthWalkRatchetTests", "TestPackagePathsTests", "TestSandboxTests", "TestScratchTests"]
 test_file_patterns = ["**/CoreKitTests/Paths/**.swift", "**/CoreKitTests/Support/**.swift"]
-expected_test_min = 19
+expected_test_min = 20
 timeout_seconds = 300
 description = "TestScratch / TestSandbox / TestPackagePaths and the #filePath-walk ratchet. Run: kagami test --scope CoreKitPaths"
 

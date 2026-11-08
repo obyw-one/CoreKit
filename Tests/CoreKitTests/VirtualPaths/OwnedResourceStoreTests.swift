@@ -44,7 +44,7 @@ private struct Sandbox {
         paths = try PathLayer(root: root, registry: VirtualPathRegistry([LedgerFile.self, FlowLedger.self]))
     }
 
-    func sweep() { try? scratch.removeScratchDir(root) }
+    func sweep() { scratch.sweep(root) }
 }
 
 // MARK: - OwnedResourceStoreTests

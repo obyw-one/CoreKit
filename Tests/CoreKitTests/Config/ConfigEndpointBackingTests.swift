@@ -46,7 +46,7 @@ struct ConfigEndpointBackingTests {
         case .settingsFile:
             let scratch = TestScratch.forPackage()
             let root = try scratch.makeScratchDir(scope: "config-endpoint")
-            tearDown = { try? scratch.removeScratchDir(root) }
+            tearDown = { scratch.sweep(root) }
             let paths = try PathLayer(root: root, registry: VirtualPathRegistry([AppConfigFile.self]))
             let file = try paths.url(for: AppConfigFile(query: Self.seeded))
             let repository = CacheRepository<AppConfig>(
@@ -95,7 +95,7 @@ struct ConfigEndpointBackingTests {
     func settingsFileIsReadableJSON() async throws {
         let scratch = TestScratch.forPackage()
         let root = try scratch.makeScratchDir(scope: "config-settings-file")
-        defer { try? scratch.removeScratchDir(root) }
+        defer { scratch.sweep(root) }
         let paths = try PathLayer(root: root, registry: VirtualPathRegistry([AppConfigFile.self]))
         let file = try paths.url(for: AppConfigFile(query: Self.seeded))
         let repository = CacheRepository<AppConfig>(

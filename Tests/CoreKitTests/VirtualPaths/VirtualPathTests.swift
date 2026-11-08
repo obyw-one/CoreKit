@@ -110,7 +110,7 @@ struct VirtualPathTests {
     func fileURL() throws {
         let scratch = TestScratch.forPackage()
         let base = try scratch.makeScratchDir(scope: "virtual-path-file-url")
-        defer { try? scratch.removeScratchDir(base) }
+        defer { scratch.sweep(base) }
         let url = try path("state", "ledger.json").fileURL(under: base)
         #expect(url.lastPathComponent == "ledger.json")
         #expect(url.deletingLastPathComponent().lastPathComponent == "state")
