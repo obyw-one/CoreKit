@@ -97,7 +97,12 @@ public struct VirtualPath: Hashable, Sendable, Codable, CustomStringConvertible 
     /// `base` followed by every component, as a `URL` built component by
     /// component. Resolve-only: nothing is created.
     public func fileURL(under base: URL) -> URL {
-        segments.reduce(base) { $0.appendingPathComponent($1.rawValue) }
+        segments.enumerated().reduce(base) { url, item in
+            // Every segment but the last is a directory on the way; the last is the thing itself.
+            url.appending(
+                path: item.element.rawValue,
+                directoryHint: item.offset == segments.count - 1 ? .notDirectory : .isDirectory)
+        }
     }
 
     public var description: String { rendered() }

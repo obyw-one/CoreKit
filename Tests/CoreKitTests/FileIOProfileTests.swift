@@ -1,3 +1,4 @@
+import CoreKitTestSupport
 import XCTest
 @testable import CoreKit
 
@@ -22,8 +23,8 @@ final class FileIOProfileTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeTempDir(_ label: String = "fio") -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("FileIOProfileTests-\(label)-\(UUID().uuidString)", isDirectory: true)
+        let dir = TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "FileIOProfileTests-\(label)-\(UUID().uuidString)", directoryHint: .isDirectory)
         return dir
     }
 
@@ -112,7 +113,7 @@ final class FileIOProfileTests: XCTestCase {
 
         try repo.save(id, data: model)
 
-        let fileURL = dir.appendingPathComponent("DurableJSON-\(id).cache")
+        let fileURL = dir.appending(path: "DurableJSON-\(id).cache", directoryHint: .notDirectory)
         let raw = try Data(contentsOf: fileURL)
         let json = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
         XCTAssertNotNil(json, "durable-written file must be parseable JSON")
@@ -132,7 +133,7 @@ final class FileIOProfileTests: XCTestCase {
         try repo.save(id, data: TestModel(id: 6, name: "lock"))
 
         let cacheFilename = "DurableLock-\(id).cache"
-        let lockURL = dir.appendingPathComponent(".\(cacheFilename).lock")
+        let lockURL = dir.appending(path: ".\(cacheFilename).lock", directoryHint: .notDirectory)
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: lockURL.path),
             "durable save must leave the sibling lock file in place for future lock acquisition"

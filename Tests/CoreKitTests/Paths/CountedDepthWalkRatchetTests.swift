@@ -72,12 +72,12 @@ struct CountedDepthWalkRatchetTests {
         let testsRoot =
             TestPackagePaths
                 .packageRoot()
-                .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
+                .appending(path: TestScratch.testsDirectoryName, directoryHint: .isDirectory)
         let sandbox = try TestSandbox.make(under: testsRoot)
         defer { try? sandbox.sweep() }
 
-        let a = sandbox.root.appendingPathComponent("A.swift")
-        let b = sandbox.root.appendingPathComponent("nested/B.swift")
+        let a = sandbox.root.appending(path: "A.swift", directoryHint: .notDirectory)
+        let b = sandbox.root.appending(path: "nested/B.swift", directoryHint: .notDirectory)
         try FileManager.default.createDirectory(
             at: b.deletingLastPathComponent(), withIntermediateDirectories: true
         )
@@ -117,8 +117,8 @@ struct CountedDepthWalkRatchetTests {
         let testsRoot =
             TestPackagePaths
                 .packageRoot()
-                .appendingPathComponent("Tests", isDirectory: true)
-                .appendingPathComponent("CoreKitTests", isDirectory: true)
+                .appending(path: "Tests", directoryHint: .isDirectory)
+                .appending(path: "CoreKitTests", directoryHint: .isDirectory)
         let hits = try CountedDepthWalkRatchet.scan(testsRoot: testsRoot)
         #expect(
             hits.isEmpty,
@@ -131,11 +131,11 @@ struct CountedDepthWalkRatchetTests {
         let baselineURL =
             TestPackagePaths
                 .packageRoot()
-                .appendingPathComponent("Tests", isDirectory: true)
-                .appendingPathComponent("CoreKitTests", isDirectory: true)
-                .appendingPathComponent("Paths", isDirectory: true)
-                .appendingPathComponent("Fixtures", isDirectory: true)
-                .appendingPathComponent("counted-depth-walk-baseline.json")
+                .appending(path: "Tests", directoryHint: .isDirectory)
+                .appending(path: "CoreKitTests", directoryHint: .isDirectory)
+                .appending(path: "Paths", directoryHint: .isDirectory)
+                .appending(path: "Fixtures", directoryHint: .isDirectory)
+                .appending(path: "counted-depth-walk-baseline.json", directoryHint: .notDirectory)
         let data = try Data(contentsOf: baselineURL)
         let baseline = try JSONDecoder().decode(CountedDepthWalkBaseline.self, from: data)
         #expect(baseline.files.isEmpty)

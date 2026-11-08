@@ -1,3 +1,4 @@
+import CoreKitTestSupport
 import XCTest
 @testable import CoreKit
 
@@ -13,8 +14,8 @@ final class CacheRepositoryTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        scratch = FileManager.default.temporaryDirectory
-            .appendingPathComponent("CacheRepoTests-default-\(UUID().uuidString)", isDirectory: true)
+        scratch = TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "CacheRepoTests-default-\(UUID().uuidString)", directoryHint: .isDirectory)
         cache = CacheRepository<TestModel>("CacheRepoTests", invalidateTime: .inTime(ttl: 3600), baseDirectory: scratch!)
     }
 
@@ -134,8 +135,8 @@ final class CacheRepositoryTests: XCTestCase {
     // MARK: - Directory override
 
     private func makeTempDir(_ label: String = "cache") -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("CacheRepoTests-\(label)-\(UUID().uuidString)", isDirectory: true)
+        TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "CacheRepoTests-\(label)-\(UUID().uuidString)", directoryHint: .isDirectory)
     }
 
     func testDirectoryOverrideCreatesDirectoryAndWritesThere() throws {
@@ -154,7 +155,7 @@ final class CacheRepositoryTests: XCTestCase {
         try repo.save(id, data: model)
 
         // The file must exist under the overridden directory, NOT under .documentDirectory.
-        let expectedFile = dir.appendingPathComponent("DirOverride-\(id).cache")
+        let expectedFile = dir.appending(path: "DirOverride-\(id).cache", directoryHint: .notDirectory)
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: expectedFile.path),
             "expected cache file at \(expectedFile.path) — got nothing there"
@@ -206,7 +207,7 @@ final class CacheRepositoryTests: XCTestCase {
         let model = TestModel(id: 99, name: "shape-check")
         try repo.save(id, data: model)
 
-        let fileURL = dir.appendingPathComponent("RawShape-\(id).cache")
+        let fileURL = dir.appending(path: "RawShape-\(id).cache", directoryHint: .notDirectory)
         let raw = try Data(contentsOf: fileURL)
         let json = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
         XCTAssertNotNil(json, "raw cache file must parse as a JSON object")
@@ -238,7 +239,7 @@ final class CacheRepositoryTests: XCTestCase {
         let id = "container-\(UUID().uuidString)"
         try repo.save(id, data: TestModel(id: 1, name: "in-envelope"))
 
-        let fileURL = dir.appendingPathComponent("ContainerShape-\(id).cache")
+        let fileURL = dir.appending(path: "ContainerShape-\(id).cache", directoryHint: .notDirectory)
         let raw = try Data(contentsOf: fileURL)
         let json = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
         XCTAssertNotNil(json)
@@ -266,7 +267,7 @@ final class CacheRepositoryTests: XCTestCase {
         try repo.save(id, data: model)
 
         // Back-date the file's mtime by 1 year.
-        let fileURL = dir.appendingPathComponent("RawNever-\(id).cache")
+        let fileURL = dir.appending(path: "RawNever-\(id).cache", directoryHint: .notDirectory)
         let ancient = Date(timeIntervalSinceNow: -365 * 24 * 60 * 60)
         try FileManager.default.setAttributes(
             [.modificationDate: ancient],
@@ -322,8 +323,8 @@ final class CacheRepositoryTests: XCTestCase {
     }
 
     func testCustomBaseDirectoryWritesThereNotDocuments() throws {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("corekit-basedir-\(UUID().uuidString)", isDirectory: true)
+        let tmp = TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "corekit-basedir-\(UUID().uuidString)", directoryHint: .isDirectory)
         let scoped = CacheRepository<TestModel>(
             "WsMeta", invalidateTime: .never, baseDirectory: tmp
         )
@@ -332,7 +333,7 @@ final class CacheRepositoryTests: XCTestCase {
         try scoped.save("x", data: model)
 
         // File landed under the custom base dir, not ~/Documents.
-        let expected = tmp.appendingPathComponent("WsMeta-x.cache")
+        let expected = tmp.appending(path: "WsMeta-x.cache", directoryHint: .notDirectory)
         XCTAssertTrue(FileManager.default.fileExists(atPath: expected.path),
                       "cache file must be written under the custom baseDirectory")
         XCTAssertEqual(try scoped.get("x"), model)
@@ -341,9 +342,9 @@ final class CacheRepositoryTests: XCTestCase {
     }
 
     func testCustomBaseDirectoryIsCreatedIfMissing() throws {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("corekit-mkdir-\(UUID().uuidString)", isDirectory: true)
-            .appendingPathComponent("nested", isDirectory: true)
+        let tmp = TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "corekit-mkdir-\(UUID().uuidString)", directoryHint: .isDirectory)
+            .appending(path: "nested", directoryHint: .isDirectory)
         XCTAssertFalse(FileManager.default.fileExists(atPath: tmp.path))
         let scoped = CacheRepository<TestModel>("N", baseDirectory: tmp)
 

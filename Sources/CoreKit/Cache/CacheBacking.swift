@@ -60,11 +60,16 @@ public enum CacheBackingError: Error, Sendable, Equatable, CustomStringConvertib
 /// implements, whatever it is: a folder, memory, a database table, an object
 /// store (BR-RP-11).
 ///
-/// A backing knows nothing of models, envelopes, TTL or file naming: those are
-/// the cache's, identical over every backing, which is what makes the same
-/// consumer code behave the same when the backing is swapped. The backing owns
-/// WHERE (a directory, a bucket and node, a table) and HOW the bytes are
-/// committed.
+/// A backing is bytes by name: no model, no identity, no envelope and no TTL.
+/// ``RepositoryProtocol`` is the opposite shape, a typed model by id.
+/// ``CacheRepository`` and ``AsyncCacheRepository`` are the consumers of a
+/// backing: they conform to ``RepositoryProtocol`` ON TOP of it and own what a
+/// backing must not know (envelope, TTL, codec, naming). A backing that were
+/// itself a `RepositoryProtocol` would make the cache a repository over a
+/// repository, with the model erased to `Data` and the id to `String` — the
+/// same two words meaning two different contracts. It also could not report the
+/// entry's modification time (what raw-envelope TTL reads) or list entries
+/// without decoding every payload. See `docs/cache.md`.
 ///
 /// Async-first, because a database or an object store can only be: a backing
 /// that is naturally synchronous also conforms to ``SynchronousCacheBacking``.

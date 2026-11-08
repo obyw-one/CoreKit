@@ -34,7 +34,7 @@ struct CacheDefaultLocationTests {
         defer { box.sweep() }
         let cache = CacheRepository<ConformancePayload>("located", invalidateTime: .never, in: try box.layer())
         try cache.save("a", data: sample)
-        let expected = box.root.appendingPathComponent("cache", isDirectory: true).appendingPathComponent("located-a.cache")
+        let expected = box.root.appending(path: "cache", directoryHint: .isDirectory).appending(path: "located-a.cache", directoryHint: .notDirectory)
         #expect(FileManager.default.fileExists(atPath: expected.path))
         #expect(try cache.get("a") == sample)
     }
@@ -43,11 +43,11 @@ struct CacheDefaultLocationTests {
     func nodeCanBeRelocated() throws {
         let box = try Sandbox()
         defer { box.sweep() }
-        let elsewhere = box.root.appendingPathComponent("elsewhere", isDirectory: true)
+        let elsewhere = box.root.appending(path: "elsewhere", directoryHint: .isDirectory)
         let cache = CacheRepository<ConformancePayload>(
             "moved", invalidateTime: .never, in: try box.layer(nodeRoots: [CacheDirectory.node: elsewhere]))
         try cache.save("a", data: sample)
-        #expect(FileManager.default.fileExists(atPath: elsewhere.appendingPathComponent("moved-a.cache").path))
+        #expect(FileManager.default.fileExists(atPath: elsewhere.appending(path: "moved-a.cache", directoryHint: .notDirectory).path))
     }
 
     @Test("a layer that does not own CacheDirectory is a named error on every operation, with no other folder tried")
@@ -74,7 +74,7 @@ struct CacheDefaultLocationTests {
         defer { box.sweep() }
         let cache = CacheRepository<ConformancePayload>("explicit", invalidateTime: .never, baseDirectory: box.root)
         try cache.save("a", data: sample)
-        #expect(FileManager.default.fileExists(atPath: box.root.appendingPathComponent("explicit-a.cache").path))
+        #expect(FileManager.default.fileExists(atPath: box.root.appending(path: "explicit-a.cache", directoryHint: .notDirectory).path))
     }
 
     @Test("CacheDirectory is the cache node itself")
@@ -108,7 +108,7 @@ extension ResolvePropertyWrapperTests {
 
             let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
             for directory in documents {
-                #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("\(name)-a.cache").path),
+                #expect(!FileManager.default.fileExists(atPath: directory.appending(path: "\(name)-a.cache", directoryHint: .notDirectory).path),
                         "the documents folder was used as a fallback")
             }
         }
@@ -127,7 +127,7 @@ extension ResolvePropertyWrapperTests {
             let cache = CacheRepository<ConformancePayload>("via-di", invalidateTime: .never)
             try cache.save("a", data: sample)
             #expect(FileManager.default.fileExists(
-                atPath: box.root.appendingPathComponent("cache", isDirectory: true).appendingPathComponent("via-di-a.cache").path))
+                atPath: box.root.appending(path: "cache", directoryHint: .isDirectory).appending(path: "via-di-a.cache", directoryHint: .notDirectory).path))
             #expect(try cache.get("a") == sample)
         }
 
