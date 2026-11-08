@@ -34,7 +34,7 @@ private enum ScopeRegistry {
         else { return [] }
         let body = String(block[range])
         guard isList else { return [body] }
-        let quoted = (try? NSRegularExpression(pattern: "\"([^\"]*)\"")) ?? NSRegularExpression()
+        guard let quoted = try? NSRegularExpression(pattern: "\"([^\"]*)\"") else { return [] }
         return quoted.matches(in: body, range: NSRange(body.startIndex..., in: body)).compactMap {
             Range($0.range(at: 1), in: body).map { String(body[$0]) }
         }
