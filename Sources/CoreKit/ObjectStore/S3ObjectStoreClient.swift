@@ -44,8 +44,8 @@ public struct S3Response: Sendable, Equatable {
 }
 
 /// Sends one request. The seam that keeps this client free of a networking
-/// stack: ``URLSessionS3Transport`` is the Foundation one, NetKit can supply its
-/// own, and a test supplies a fake.
+/// stack: CoreKit ships no transport. The caller injects one — NetKit's
+/// `URLSessionS3Transport` in production, a fake in a test.
 public protocol S3Transport: Sendable {
     func send(_ request: S3Request) async throws -> S3Response
 }
@@ -317,41 +317,5 @@ private final class ListingParser: NSObject, XMLParserDelegate {
         if current == elementName { collected[elementName, default: []].append(text) }
         current = nil
         text = ""
-    }
-}
-
-// MARK: - URLSessionS3Transport
-
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
-
-/// The Foundation transport: `URLSession`.
-public struct URLSessionS3Transport: S3Transport {
-
-    private static let hostHeader = "host"
-    private let session: URLSession
-
-    public init(session: URLSession = .shared) {
-        self.session = session
-    }
-
-    public func send(_ request: S3Request) async throws -> S3Response {
-        var urlRequest = URLRequest(url: request.url)
-        urlRequest.httpMethod = request.method
-        for (name, value) in request.headers where name.lowercased() != Self.hostHeader {
-            // The URL loading system derives Host from the URL (which is what was signed).
-            urlRequest.setValue(value, forHTTPHeaderField: name)
-        }
-        if !request.body.isEmpty { urlRequest.httpBody = request.body }
-        let (data, response) = try await session.data(for: urlRequest)
-        guard let http = response as? HTTPURLResponse else {
-            throw S3ObjectStoreError.malformedResponse(operation: request.method, detail: "the response is not HTTP")
-        }
-        var headers: [String: String] = [:]
-        for (name, value) in http.allHeaderFields {
-            if let name = name as? String, let value = value as? String { headers[name.lowercased()] = value }
-        }
-        return S3Response(status: http.statusCode, headers: headers, body: data)
     }
 }

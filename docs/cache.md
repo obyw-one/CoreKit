@@ -69,8 +69,8 @@ signer is checked against AWS's published worked example in `AWSSignatureV4Tests
 
 **Injected, never defaulted.** The endpoint URL, the region the store signs for, the credentials (`S3Credentials`, whose secret never
 appears in `description`, `debugDescription` or a mirror), the transport and the clock are all constructor arguments. There is no default
-endpoint, bucket or key. The transport is a protocol (`S3Transport`): `URLSessionS3Transport` is the Foundation one, another stack can
-provide its own, and tests use a fake.
+endpoint, bucket or key. The transport is a protocol (`S3Transport`) and CoreKit ships none: the caller injects one. Production uses NetKit's
+`URLSessionS3Transport` (`import NetKit`); tests use a fake.
 
 **Failure behaviour.**
 - A missing object is `nil` / `false` (`fetch`, `has`, `delete`), not an error.
@@ -87,13 +87,14 @@ import CoreKit
 import Foundation
 
 func evidenceCache(
-    endpoint: URL, region: String, accessKey: String, secretKey: String, node: NodeID
+    endpoint: URL, region: String, credentials: S3Credentials, node: NodeID,
+    transport: any S3Transport
 ) throws -> AsyncCacheRepository<Evidence> {
     let client = try S3ObjectStoreClient(
         endpoint: endpoint,
         region: region,
-        credentials: S3Credentials(accessKey: accessKey, secretKey: secretKey),
-        transport: URLSessionS3Transport(),
+        credentials: credentials,
+        transport: transport,
         clock: { Date() })
     let backing = ObjectStoreCacheBacking(client: client, bucket: "evidence", node: node)
     return AsyncCacheRepository<Evidence>("evidence", invalidateTime: .never, envelope: .raw, backing: backing)

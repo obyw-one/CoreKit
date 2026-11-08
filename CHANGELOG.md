@@ -29,6 +29,9 @@ Pre-1.0, so a minor carries breaking changes. Three things can stop a consumer f
 - **Config**: `AppConfig`, `ConfigEndpoint`, `AppConfigService`, `ConfigBackedFeatureFlags`.
 - `CacheDirectory` and `CacheLocationError`: the cache directory as a resource the path layer owns.
 
+### Transport is the caller's: `URLSessionS3Transport` is NetKit's
+CoreKit keeps `S3Transport`, `AWSSignatureV4`, the request/response types and the listing parser, and ships no transport. `S3ObjectStoreClient(transport:)` was already a required argument; the `URLSession` transport moved to NetKit (`import NetKit`). Source-breaking only for a caller of `URLSessionS3Transport` from CoreKit, which was never in a tagged release.
+
 ### Deprecated: `CacheRepository` with no directory
 `CacheRepository(_:invalidateTime:baseDirectory: URL? = nil, ...)` used to store in the app's documents folder when `baseDirectory` was left out or `nil`. A default nobody chose is gone:
 
