@@ -15,7 +15,7 @@ private struct Sandbox {
         root = try scratch.makeScratchDir(scope: "cache-default-location")
     }
 
-    func sweep() { try? scratch.removeScratchDir(root) }
+    func sweep() { scratch.sweep(root) }
 
     func layer(registering owners: [any VirtualPathOwning.Type] = [CacheDirectory.self],
                nodeRoots: [VirtualNode: URL] = [:]) throws -> PathLayer {

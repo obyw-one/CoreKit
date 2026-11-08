@@ -1,6 +1,7 @@
 import CoreKit
 import CoreKitTestSupport
 import Foundation
+import Testing
 
 // MARK: - BackingKind
 
@@ -105,7 +106,7 @@ struct BackingHarnesses {
         return BuiltBacking(
             repository: harness,
             backing: CacheBackingHarness(label: kind.rawValue, backing: backing, age: age),
-            tearDown: { try? scratch.removeScratchDir(directory) })
+            tearDown: { scratch.sweep(directory) })
     }
 
     // MARK: In memory

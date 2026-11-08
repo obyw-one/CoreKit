@@ -8,8 +8,8 @@ import Testing
 @Suite("AppConfig — the server-driven facts, one wire shape for every backing (BR-RP-13)")
 struct AppConfigTests {
 
-    private func decode(_ json: String) throws -> AppConfig {
-        try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
+    private func decode(_ json: Data) throws -> AppConfig {
+        try JSONDecoder().decode(AppConfig.self, from: json)
     }
 
     /// The PocketBase record, a raw wire fixture loaded by URL.
@@ -48,19 +48,17 @@ struct AppConfigTests {
 
     @Test("optional fields may be absent")
     func optionalFields() throws {
-        let config = try decode("""
-        {"id":"r","app_id":"demo","min_version":"1.0.0","latest_version":"1.0.0","kill_switch":false,
-         "maintenance_mode":false,"feature_flags":{}}
-        """)
+        let config = try decode(FixtureFile.data("app-config-optional-fields-absent.json"))
         #expect(config.maintenanceMessage == nil)
         #expect(config.configData == nil)
         #expect(config.featureFlags.values.isEmpty)
     }
 
     @Test("a record missing a required field is rejected, not defaulted")
-    func missingRequiredField() {
+    func missingRequiredField() throws {
+        let wire = try FixtureFile.data("app-config-missing-required-field.json")
         #expect(throws: DecodingError.self) {
-            try decode(#"{"id":"r","app_id":"demo","min_version":"1.0.0"}"#)
+            try decode(wire)
         }
     }
 

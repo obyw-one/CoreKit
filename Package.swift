@@ -76,7 +76,11 @@ let package = Package(
         .testTarget(
             name: "CoreKitTests",
             dependencies: ["CoreKit", "CoreKitTestSupport"],
-            exclude: ["Fixtures", "Paths/Fixtures"]
+            // Paths/Fixtures stays excluded: the counted-depth ratchet baseline there is read by path on purpose.
+            exclude: ["Paths/Fixtures"],
+            // Wire fixtures are declared resources: a moved or renamed file is a build error, and
+            // `FixtureFile` reads them through `Bundle.module`, not a path into the checkout.
+            resources: [.process("Fixtures")]
         ),
         .testTarget(
             name: "CoreKitUITests",

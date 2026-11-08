@@ -79,6 +79,23 @@ public struct TestScratch: Sendable, Equatable {
         }
     }
 
+    /// The non-throwing form for `defer` and teardown closures, where `try?` used to discard a failed cleanup.
+    /// Removes `url` and, on any failure (a refused path, a failed remove, a tree still on disk afterwards),
+    /// calls `report` with a message naming the path. Pure function of its arguments: no shared state, so it is
+    /// safe under parallel Swift Testing. The test target binds `report` to `Issue.record`
+    /// (`Tests/CoreKitTests/Support/ScratchSweep.swift`) so a leak fails the test that made it.
+    public func sweep(_ url: URL, report: (_ message: String) -> Void) {
+        do {
+            try removeScratchDir(url)
+        } catch {
+            report("scratch cleanup failed for \(url.path): \(error)")
+            return
+        }
+        if FileManager.default.fileExists(atPath: url.path) {
+            report("scratch cleanup left \(url.path) on disk")
+        }
+    }
+
     private static func logRemoval(_ url: URL) {
         let line = "TestScratch.removeScratchDir: removed \(url.path)\n"
         FileHandle.standardError.write(Data(line.utf8))

@@ -13,7 +13,7 @@ struct LocalFolderCacheBackingTests {
 
     private func withDirectory(_ body: (URL) async throws -> Void) async throws {
         let directory = try scratch.makeScratchDir(scope: "local-folder-backing")
-        defer { try? scratch.removeScratchDir(directory) }
+        defer { scratch.sweep(directory) }
         try await body(directory)
     }
 
