@@ -73,11 +73,11 @@ struct DeviceCapacitySnapshotTests {
     /// prober. If a call site quietly reads ambient device state on the
     /// side, tests pass against fixtures while production diverges.
     @Test("T-CP-02 every snapshot field originates from the injected prober")
-    func mockProberDrivesFields() {
+    func mockProberDrivesFields() async {
         let fixture = DeviceCapacitySnapshot.macFullyPopulated
         let prober: any DeviceCapacityProbing = MockCapacityProber(fixture)
 
-        let read = prober.probe()
+        let read = await prober.probe()
 
         #expect(read.totalRAM == fixture.totalRAM)
         #expect(read.availableNow == fixture.availableNow)
@@ -95,7 +95,7 @@ struct DeviceCapacitySnapshotTests {
     /// reason this wave exists: a 64 GB machine carrying 40 GB of swap
     /// must NOT read as idle just because totalRAM hasn't changed.
     @Test("T-CP-03 live pressure moves availableNow, not totalRAM")
-    func livePressureChangesAvailableNow() {
+    func livePressureChangesAvailableNow() async {
         let idle = DeviceCapacitySnapshot(
             totalRAM: 64 * 1024 * 1024 * 1024,
             availableNow: 30 * 1024 * 1024 * 1024,
@@ -110,9 +110,9 @@ struct DeviceCapacitySnapshotTests {
         )
         let prober = MockCapacityProber(idle)
 
-        let first = prober.probe()
-        prober.setSnapshot(pressed)
-        let second = prober.probe()
+        let first = await prober.probe()
+        await prober.setSnapshot(pressed)
+        let second = await prober.probe()
 
         #expect(first.totalRAM == second.totalRAM)
         #expect(first.availableNow != second.availableNow)
@@ -124,12 +124,12 @@ struct DeviceCapacitySnapshotTests {
     // class: an 8-GiB fallback that reads downstream as a real measurement
     // is exactly how a wrong verdict ships confidently.
     @Test("T-CP-05 unmeasurable fields are nil, never a substituted constant")
-    func unmeasurableFieldIsNil() {
+    func unmeasurableFieldIsNil() async {
         // A prober where the platform could not read anything but basis.
         let allNilExceptBasis = DeviceCapacitySnapshot(basis: .perProcess)
         let prober: any DeviceCapacityProbing = MockCapacityProber(allNilExceptBasis)
 
-        let read = prober.probe()
+        let read = await prober.probe()
 
         #expect(read.totalRAM == nil)
         #expect(read.availableNow == nil)
@@ -203,8 +203,8 @@ struct DeviceCapacitySnapshotTests {
         var isDir: ObjCBool = false
         guard
             FileManager.default.fileExists(atPath: sourcesDir.path, isDirectory: &isDir),
-            isDir.boolValue else
-        {
+            isDir.boolValue
+        else {
             throw RatchetLocateError.sourcesNotFound(sourcesDir.path)
         }
         return sourcesDir
@@ -214,7 +214,7 @@ struct DeviceCapacitySnapshotTests {
         case sourcesNotFound(String)
         var description: String {
             switch self {
-            case let .sourcesNotFound(path):
+            case .sourcesNotFound(let path):
                 "CoreKit sources directory not found at \(path)"
             }
         }

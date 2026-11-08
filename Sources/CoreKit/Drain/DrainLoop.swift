@@ -51,7 +51,7 @@ public actor DrainLoop<D: Draining> {
     /// zero-work summary (the run loop turns that into backoff).
     @discardableResult
     public func tickOnce() async -> DrainTickSummary {
-        let startedAt = clock.now()
+        let startedAt = await clock.now()
 
         let items: [D.Item]
         do {
@@ -88,7 +88,7 @@ public actor DrainLoop<D: Draining> {
                             itemID: id,
                             reason: String(describing: error),
                             phase: "checkpoint",
-                            at: clock.now()
+                            at: await clock.now()
                         )
                     )
                 }
@@ -100,7 +100,7 @@ public actor DrainLoop<D: Draining> {
                         itemID: id,
                         reason: String(describing: error),
                         phase: "process",
-                        at: clock.now()
+                        at: await clock.now()
                     )
                 )
             }

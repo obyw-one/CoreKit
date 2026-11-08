@@ -32,7 +32,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testLegacyNamingUnchanged() throws {
         let cache = CacheRepository<TestModel>(
-            "unit", invalidateTime: .never, baseDirectory: dir, envelope: .raw
+            "unit", invalidateTime: .never, baseDirectory: dir!, envelope: .raw
         )
         try cache.save("a", data: TestModel(id: 1, name: "x"))
         XCTAssertTrue(
@@ -43,7 +43,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testBareIdWithExtension() throws {
         let cache = CacheRepository<TestModel>(
-            "ignored", invalidateTime: .never, baseDirectory: dir,
+            "ignored", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .bareId(ext: "json")
         )
         try cache.save("pr-7.dossier", data: TestModel(id: 7, name: "d"))
@@ -56,7 +56,7 @@ final class CacheNamingCodecTests: XCTestCase {
     func testBareIdVerbatim_dotfileContract() throws {
         // The shikki BR-11 case: the id IS the whole contractual filename.
         let cache = CacheRepository<TestModel>(
-            "ignored", invalidateTime: .never, baseDirectory: dir,
+            "ignored", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .bareId()
         )
         try cache.save(".shikki-unit.json", data: TestModel(id: 1, name: "w1"))
@@ -68,7 +68,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testCustomNaming() throws {
         let cache = CacheRepository<TestModel>(
-            "ballots", invalidateTime: .never, baseDirectory: dir,
+            "ballots", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .custom { name, id in "\(name)~\(id).v2" }
         )
         try cache.save("42", data: TestModel(id: 42, name: "c"))
@@ -82,7 +82,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testHumanReadableCodec_iso8601RoundTripAndShape() throws {
         let cache = CacheRepository<DatedModel>(
-            "manifest", invalidateTime: .never, baseDirectory: dir,
+            "manifest", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .bareId(ext: "json"), codec: .humanReadable
         )
         let stamp = Date(timeIntervalSince1970: 1_753_000_000)
@@ -111,7 +111,7 @@ final class CacheNamingCodecTests: XCTestCase {
         // Guard: default codec must stay the bare encoder — existing .raw
         // corpora (numeric dates, compact) keep decoding.
         let cache = CacheRepository<DatedModel>(
-            "raw", invalidateTime: .never, baseDirectory: dir, envelope: .raw
+            "raw", invalidateTime: .never, baseDirectory: dir!, envelope: .raw
         )
         try cache.save("d", data: DatedModel(name: "n", stamp: Date()))
         let bytes = try String(
@@ -124,7 +124,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testRawStringVerbatimMarkdown() throws {
         let cache = CacheRepository<String>(
-            "ballot", invalidateTime: .never, baseDirectory: dir,
+            "ballot", invalidateTime: .never, baseDirectory: dir!,
             envelope: .rawString, naming: .bareId(ext: "md")
         )
         let markdown = "# Ballot\n\n- [ ] item one\n- [x] item two\n"
@@ -140,7 +140,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testRawStringRejectsNonStringModel() throws {
         let cache = CacheRepository<TestModel>(
-            "bad", invalidateTime: .never, baseDirectory: dir, envelope: .rawString
+            "bad", invalidateTime: .never, baseDirectory: dir!, envelope: .rawString
         )
         XCTAssertThrowsError(try cache.save("x", data: TestModel(id: 1, name: "no"))) { error in
             XCTAssertEqual(error as? CacheRepositoryError, .encodedError)

@@ -70,8 +70,10 @@ final class FileIOProfileTests: XCTestCase {
     // MARK: - .atomic
 
     func testAtomicProfileIsDefaultAndBackwardCompat() throws {
-        // The 1-arg init must default to .atomic (=today's behavior).
-        let repo = CacheRepository<TestModel>("AtomicDefault")
+        // The profile must default to .atomic (=today's behavior).
+        let dir = makeTempDir("atomic-default")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repo = CacheRepository<TestModel>("AtomicDefault", baseDirectory: dir)
         XCTAssertEqual(repo.ioProfile, .atomic)
     }
 
@@ -209,7 +211,9 @@ final class FileIOProfileTests: XCTestCase {
     }
 
     func testRepositoryExposesIoProfile() {
-        let repo = CacheRepository<TestModel>("ProfileExposed", ioProfile: .durable)
+        let dir = makeTempDir("profile-exposed")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repo = CacheRepository<TestModel>("ProfileExposed", baseDirectory: dir, ioProfile: .durable)
         XCTAssertEqual(repo.ioProfile, .durable)
     }
 }
