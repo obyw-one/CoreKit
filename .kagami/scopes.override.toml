@@ -8,7 +8,7 @@ package_path = "."
 type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests"]
 test_file_patterns = ["**/CoreKitTests/*.swift"]
 timeout = 300
-expected_test_min = 93
+expected_test_min = 103
 description = "CoreKit cache + container + resolve suites. Run: kagami test --scope CoreKitCache"
 
 [[scopes]]
@@ -119,7 +119,7 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests", "CacheDefaultLocationTests", "CacheDefaultLocationDITests"]
 test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
-expected_test_min = 56
+expected_test_min = 65
 timeout_seconds = 600
 description = "Cache backings: behaviour + contract suites over every backing, SigV4 known-answer, S3 client, node-id addressing. Run: kagami test --scope CoreKitCacheBackings"
 
@@ -145,6 +145,6 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["JSONHelpersTests", "JSONValueUntypedTests"]
 test_file_patterns = ["**/CoreKitTests/JSON/**.swift"]
-expected_test_min = 1
+expected_test_min = 13
 timeout_seconds = 300
 description = "JSON helpers and JSONValue(untyped:): bool/int/double discrimination through JSONSerialization, native and bridged. Run: kagami test --scope CoreKitJSON"
