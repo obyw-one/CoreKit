@@ -26,7 +26,8 @@ private func evidenceCache(
 
 private enum Tree: String, VirtualNodeNaming {
     case flows, state
-    case aiRouting = "state/ai-routing"
+    case aiRouting = "ai-routing"
+    var parent: Tree? { self == .aiRouting ? .state : nil }
 }
 
 private struct PlansLedger: VirtualPathOwning {

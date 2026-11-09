@@ -9,7 +9,8 @@ import CoreKit
 
 enum Tree: String, VirtualNodeNaming {
     case flows, state
-    case aiRouting = "state/ai-routing"
+    case aiRouting = "ai-routing"
+    var parent: Tree? { self == .aiRouting ? .state : nil }
 }
 
 /// A single resource: the static placement is the whole declaration.
@@ -30,7 +31,9 @@ struct FlowMetadata: VirtualPathOwning {
 
 The static `placement` (node + name) is what the registry keys on; the instance `location()` is the concrete path below the node.
 A node is a value, not a case of a closed enum, so a project defines its own scope kinds and the root of any of them can be moved by settings.
-A `String` enum conforming to `VirtualNodeNaming` names them by case (`Tree.state` is the node `state`), and every API that takes a node accepts it directly, with no `.node`; the raw value is the node's path, so a nested node is a raw value with a `/` in it (`case aiRouting = "state/ai-routing"`), with no override.
+A `String` enum conforming to `VirtualNodeNaming` names them by case (`Tree.state` is the node `state`), and every API that takes a node accepts it directly, with no `.node`; the raw value is one segment, and a nested node names its parent by case (`var parent: Tree? { self == .aiRouting ? .state : nil }`), never by a string with a `/` in it: a string can only prove it is a legal path, a case reference proves the parent is a declared node, so renaming `state` moves `aiRouting` with it. Every other case needs no body (`parent` defaults to `nil`).
+
+Because the enum is `CaseIterable` and each case states its parent, the whole tree is reconstructible: `VirtualNodeTree<Tree>` gives one enum's roots, children and depth. `parent` stays inside its enum, so enums are composed by `mount` (the node an enum's roots hang from, default the root): `try VirtualNodeRegistry([Tree.self, App.self]).rendered(resolving: layer)` draws the whole tree from `(root)` down with where each node lands. A parent cycle traps in `node` with a message and is reported by `VirtualNodeNamingRatchet`.
 
 ## Segments cannot climb
 
