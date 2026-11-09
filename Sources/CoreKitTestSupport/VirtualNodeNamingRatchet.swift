@@ -10,19 +10,25 @@ import Foundation
 /// empty instead of writing their own per-tree test. Like the other ratchets
 /// here it imports no test framework, so every kit's suite can call it.
 ///
-/// Walking `allCases` also evaluates every case's ``VirtualNodeConvertible/node``,
-/// which is what closes the one cost of the trapping default: `case bad = "a/b"`
-/// compiles, and would die at first use in a consumer. Here it dies in the suite.
+/// Checks: the parent graph is acyclic (reported, never evaluated, so a loop
+/// cannot trap the suite), no two cases name one node, and every node's base
+/// resolves under `layer.root`. Walking `allCases` also evaluates each raw
+/// value as a ``PathSegment``, so an invalid name dies here, not in a consumer.
 public enum VirtualNodeNamingRatchet {
 
-    /// - Returns: one line per collision (two cases naming one node) and per
-    ///   node whose base escapes `layer.root`. Empty means clean.
+    /// - Returns: one line per parent cycle, per collision (two cases naming
+    ///   one node) and per node whose base escapes `layer.root`. Empty means clean.
     public static func violations<Tree: VirtualNodeNaming>(
         of _: Tree.Type, in layer: some PathResolving
     ) -> [String] {
         var seen: [VirtualNode: Tree] = [:]
         var found: [String] = []
         for tree in Tree.allCases {
+            // A cyclic case has no node to evaluate: report it and move on.
+            guard tree.ancestry != nil else {
+                found.append("\(Tree.self).\(tree): parent chain loops")
+                continue
+            }
             let node = tree.node
             if let first = seen[node] {
                 found.append("\(Tree.self).\(first) and .\(tree) both name node \(node)")
@@ -34,5 +40,18 @@ public enum VirtualNodeNamingRatchet {
             }
         }
         return found
+    }
+
+    /// The composed tree: the registry must build (no collision across enums, no
+    /// cycle) and every declared node must resolve under `layer.root`.
+    public static func violations(
+        composing trees: [any VirtualNodeNaming.Type], in layer: some PathResolving
+    ) -> [String] {
+        let registry: VirtualNodeRegistry
+        do { registry = try VirtualNodeRegistry(trees) } catch { return [error.description] }
+        return registry.declared.compactMap { entry in
+            PathContainment.isContained(layer.base(of: entry.node), in: layer.root)
+                ? nil : "\(entry.name): base of \(entry.node) escapes root \(layer.root.path)"
+        }
     }
 }

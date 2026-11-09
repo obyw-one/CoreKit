@@ -7,7 +7,8 @@ import Testing
 
 private enum Tree: String, VirtualNodeNaming {
     case flows, state, queue
-    case aiRouting = "state/ai-routing"
+    case aiRouting = "ai-routing"
+    var parent: Tree? { self == .aiRouting ? .state : nil }
 }
 
 /// A single resource: the static placement is the whole declaration.
