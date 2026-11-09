@@ -38,6 +38,15 @@ let package = Package(
             name: "CoreKitUI",
             targets: ["CoreKitUI"]
         ),
+        // Apple-only Keychain + auth-token persistence, absorbed from the
+        // standalone SecurityKit. Security.framework does not exist on Linux, so
+        // this is its own product: the `CoreKit` product stays Linux-clean and
+        // the backend never links it. Every source is wrapped in
+        // `#if canImport(Security)`, so the module is empty off Apple.
+        .library(
+            name: "CoreKitSecurity",
+            targets: ["CoreKitSecurity"]
+        ),
         // Test-only helpers every consumer's ratchet stands on
         // (BR-CKT-03). Split product so app targets can depend on
         // `CoreKit` without pulling test scaffolding.
@@ -70,6 +79,10 @@ let package = Package(
             dependencies: ["CoreKit"]
         ),
         .target(
+            name: "CoreKitSecurity",
+            dependencies: ["CoreKit"]
+        ),
+        .target(
             name: "CoreKitTestSupport",
             dependencies: ["CoreKit"]
         ),
@@ -81,6 +94,10 @@ let package = Package(
             // Wire fixtures are declared resources: a moved or renamed file is a build error, and
             // `FixtureFile` reads them through `Bundle.module`, not a path into the checkout.
             resources: [.process("Fixtures")]
+        ),
+        .testTarget(
+            name: "CoreKitSecurityTests",
+            dependencies: ["CoreKitSecurity", "CoreKit"]
         ),
         .testTarget(
             name: "CoreKitUITests",

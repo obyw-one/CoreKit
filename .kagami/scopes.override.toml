@@ -192,3 +192,16 @@ test_file_patterns = ["**/CoreKitTests/Gate/**.swift"]
 expected_test_min = 6
 timeout_seconds = 300
 description = "Every test file under Tests/ is run by exactly one declared scope. Run: kagami test --scope CoreKitGate"
+
+[[scopes]]
+# Absorbed from the standalone SecurityKit (2026-11-09). Apple-only: the sources
+# sit behind `#if canImport(Security)`, so on Linux this target is empty and the
+# scope measures 0 tests rather than failing the build.
+name = "CoreKitSecurity"
+test_target_name = "CoreKitSecurityTests"
+package_path = "."
+type_patterns = ["KeychainManagerTests", "AuthPersistenceManagerTests"]
+test_file_patterns = ["**/CoreKitSecurityTests/**.swift"]
+expected_test_min = 14
+timeout_seconds = 300
+description = "Keychain manager + auth persistence, absorbed from SecurityKit. Run: kagami test --scope CoreKitSecurity"
