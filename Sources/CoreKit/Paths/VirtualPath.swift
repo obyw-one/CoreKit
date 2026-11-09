@@ -21,7 +21,7 @@ import Foundation
 ///
 /// Because every segment is validated, a `VirtualPath` cannot contain a
 /// traversal: ``fileURL(under:)`` of any value is under its base by construction.
-public struct VirtualPath: Hashable, Sendable, Codable, CustomStringConvertible {
+public struct VirtualPath: Hashable, Sendable, Codable, CustomStringConvertible, ExpressibleByStringLiteral {
 
     /// The components, outermost first.
     public let segments: [PathSegment]
@@ -55,6 +55,22 @@ public struct VirtualPath: Hashable, Sendable, Codable, CustomStringConvertible 
             parsed.append(try PathSegment(String(component)))
         }
         segments = parsed
+    }
+
+    /// A path written as a source literal (`"state/ai-routing"`): the POSIX wire
+    /// form of a declared location.
+    ///
+    /// A literal is a constant in the source, so an invalid one is a
+    /// programming error — it traps with the reason, exactly as
+    /// ``PathSegment/init(stringLiteral:)`` does, rather than carrying a bad
+    /// path into the tree. Paths that come from data go through the throwing
+    /// ``init(parsing:separator:)``.
+    public init(stringLiteral value: String) {
+        do {
+            try self.init(parsing: value)
+        } catch {
+            preconditionFailure("VirtualPath literal '\(value)' is invalid: \(error)")
+        }
     }
 
     // MARK: - Composition

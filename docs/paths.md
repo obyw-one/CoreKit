@@ -9,6 +9,7 @@ import CoreKit
 
 enum Tree: String, VirtualNodeNaming {
     case flows, state
+    case aiRouting = "state/ai-routing"
 }
 
 /// A single resource: the static placement is the whole declaration.
@@ -29,7 +30,7 @@ struct FlowMetadata: VirtualPathOwning {
 
 The static `placement` (node + name) is what the registry keys on; the instance `location()` is the concrete path below the node.
 A node is a value, not a case of a closed enum, so a project defines its own scope kinds and the root of any of them can be moved by settings.
-A `String` enum conforming to `VirtualNodeNaming` names them by case (`Tree.state` is the node `state`), and every API that takes a node accepts it directly, with no `.node`; a nested node overrides `node` for that one case.
+A `String` enum conforming to `VirtualNodeNaming` names them by case (`Tree.state` is the node `state`), and every API that takes a node accepts it directly, with no `.node`; the raw value is the node's path, so a nested node is a raw value with a `/` in it (`case aiRouting = "state/ai-routing"`), with no override.
 
 ## Segments cannot climb
 

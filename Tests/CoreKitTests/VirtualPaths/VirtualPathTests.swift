@@ -61,6 +61,30 @@ struct VirtualPathTests {
         #expect(throws: VirtualPathError.self) { try VirtualPath(parsing: wire) }
     }
 
+    @Test("a nested node written as one path equals the same node built with child()")
+    func parsedNodeEqualsChainedNode() throws {
+        let nested = ["state", "ai-routing"].joined(separator: Self.slash)
+        let parsed = VirtualNode(path: try VirtualPath(parsing: nested))
+        let chained = VirtualNode(PathSegment(stringLiteral: "state")).child(PathSegment(stringLiteral: "ai-routing"))
+        #expect(parsed == chained)
+        #expect(parsed.path.segments.count == 2)
+        #expect(VirtualPath(stringLiteral: nested) == parsed.path)
+    }
+
+    @Test("a path refuses a traversal, a padded component and a foreign separator instead of reading them as one name")
+    func parseRefusesUnsafeAuthoredPaths() {
+        let up = PathVocabulary.parentComponent
+        let unsafe = [
+            [up, "escape"].joined(separator: Self.slash),
+            ["state", up].joined(separator: Self.slash),
+            ["state", "ai-routing "].joined(separator: Self.slash),
+            ["state", "ai-routing"].joined(separator: PathSeparator.windows.rawValue),
+        ]
+        for wire in unsafe {
+            #expect(throws: VirtualPathError.self) { try VirtualPath(parsing: wire) }
+        }
+    }
+
     @Test("composition and queries")
     func composition() throws {
         let node = try path("flows")
