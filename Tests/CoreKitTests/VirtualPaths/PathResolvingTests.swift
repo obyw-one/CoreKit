@@ -6,15 +6,8 @@ import Testing
 // MARK: - Fixtures
 
 private enum Tree: String, VirtualNodeNaming {
-    case flows, state, queue, aiRouting = "ai-routing"
-
-    /// The one nested node (`state/ai-routing`): two components, so it overrides the default.
-    var node: VirtualNode {
-        switch self {
-        case .aiRouting: Tree.state.node.child("ai-routing")
-        default: VirtualNode(PathSegment(stringLiteral: rawValue))
-        }
-    }
+    case flows, state, queue
+    case aiRouting = "state/ai-routing"
 }
 
 /// A single resource: the static placement is the whole declaration.

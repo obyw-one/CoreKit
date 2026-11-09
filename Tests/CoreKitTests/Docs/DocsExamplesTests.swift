@@ -26,6 +26,7 @@ private func evidenceCache(
 
 private enum Tree: String, VirtualNodeNaming {
     case flows, state
+    case aiRouting = "state/ai-routing"
 }
 
 private struct PlansLedger: VirtualPathOwning {
@@ -101,6 +102,7 @@ struct DocsExamplesTests {
         let layer = try PathLayer(root: root, registry: registry)
         #expect(try layer.url(for: PlansLedger()).lastPathComponent == "plans.json")
         #expect(try layer.url(for: FlowMetadata(flowID: "7f3a")).lastPathComponent == "7f3a-metadata.json")
+        #expect(Tree.aiRouting.node == Tree.state.node.child("ai-routing"))
         let address = try layer.address(for: FlowMetadata(flowID: "7f3a"), bucket: "evidence", nodeID: "mac-a")
         #expect(address.node == "mac-a")
 
