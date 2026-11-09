@@ -43,7 +43,7 @@ public enum VirtualNodeNamingRatchet {
     }
 
     /// The composed tree: the registry must build (no collision across enums, no
-    /// cycle) and every declared node must resolve under `layer.root`.
+    /// cycle, every mount resolving to a declared node) and every declared node must resolve under `layer.root`.
     public static func violations(
         composing trees: [any VirtualNodeNaming.Type], in layer: some PathResolving
     ) -> [String] {

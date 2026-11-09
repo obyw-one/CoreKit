@@ -55,10 +55,15 @@ private enum App: String, VirtualNodeNaming {
     static var mount: VirtualNode { VirtualNode("state").child("ai-routing") }
 }
 
-/// Mounted under a node nobody declares.
+/// Declares the `plugins` node that ``Plugin`` is mounted under.
+private enum PluginArea: String, VirtualNodeNaming {
+    case plugins
+}
+
+/// Mounted under ``PluginArea/plugins``.
 private enum Plugin: String, VirtualNodeNaming {
     case data
-    static var mount: VirtualNode { VirtualNode("plugins") }
+    static var mount: VirtualNode { PluginArea.plugins.node }
 }
 
 private enum Clash: String, VirtualNodeNaming {
@@ -184,17 +189,35 @@ struct VirtualNodeTreeTests {
         defer { box.sweep() }
         let layer = try PathLayer(
             root: box.dir.appending(path: "root", directoryHint: .isDirectory), registry: VirtualPathRegistry([]))
-        let registry = try VirtualNodeRegistry([Tree.self, App.self, Plugin.self])
+        let registry = try VirtualNodeRegistry([Tree.self, App.self, PluginArea.self, Plugin.self])
         #expect(App.hot.node == VirtualNode("state").child("ai-routing").child("cache").child("hot"))
         let lines = registry.rendered(resolving: layer).split(separator: "\n").map(String.init)
-        #expect(lines[0].hasPrefix("(root) (mount)  →  ") && lines[0].hasSuffix("/root"))
+        #expect(lines[0].hasPrefix("(root)  →  ") && lines[0].hasSuffix("/root"))
         let names = lines.map { $0.components(separatedBy: "  →  ")[0] }
         #expect(names == [
-            "(root) (mount)", "├── flows", "├── state", "│   └── ai-routing", "│       ├── models",
+            "(root)", "├── flows", "├── state", "│   └── ai-routing", "│       ├── models",
             "│       ├── cache", "│       │   └── hot", "│       └── logs", "├── queue",
-            "└── plugins (mount)", "    └── data",
+            "└── plugins", "    └── data",
         ])
         #expect(lines[4].hasSuffix("/root/state/ai-routing/models"))
+        #expect(!lines.contains { $0.contains("(mount)") })
+    }
+
+    @Test("a mount no registered enum declares is refused, naming the enum and the mount; order is irrelevant")
+    func unresolvedMountRefused() throws {
+        let failure = #expect(throws: VirtualNodeRegistry.Failure.self) {
+            try VirtualNodeRegistry([Tree.self, Plugin.self])
+        }
+        #expect(failure == .unresolvedMount(enumName: "Plugin", mount: VirtualNode("plugins")))
+        let message = failure?.description ?? ""
+        #expect(message.contains("Plugin") && message.contains("plugins") && message.contains("register the enum"))
+        // The owner registered AFTER the mounted enum still resolves it.
+        #expect(throws: Never.self) { try VirtualNodeRegistry([Plugin.self, PluginArea.self]) }
+        let box = try Sandbox("node-tree-unresolved-ratchet")
+        defer { box.sweep() }
+        let layer = try PathLayer(root: box.dir, registry: VirtualPathRegistry([]))
+        let found = VirtualNodeNamingRatchet.violations(composing: [Tree.self, Plugin.self], in: layer)
+        #expect(found.count == 1 && found[0].contains("Plugin") && found[0].contains("plugins"))
     }
 
     @Test("two enums naming one node, or a cyclic enum, are refused when composing")
@@ -204,7 +227,7 @@ struct VirtualNodeTreeTests {
         let box = try Sandbox("node-tree-forest-ratchet")
         defer { box.sweep() }
         let layer = try PathLayer(root: box.dir, registry: VirtualPathRegistry([]))
-        #expect(VirtualNodeNamingRatchet.violations(composing: [Tree.self, App.self, Plugin.self], in: layer).isEmpty)
+        #expect(VirtualNodeNamingRatchet.violations(composing: [Tree.self, App.self, PluginArea.self, Plugin.self], in: layer).isEmpty)
         let found = VirtualNodeNamingRatchet.violations(composing: [Tree.self, Clash.self], in: layer)
         #expect(found.count == 1 && found[0].contains("Tree.flows and Clash.flows both name node flows"))
     }
