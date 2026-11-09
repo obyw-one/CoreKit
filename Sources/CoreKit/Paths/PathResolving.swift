@@ -74,7 +74,7 @@ public protocol PathResolving: VirtualPathOwnerable {
     /// The directory a node is served from: `root` plus the node's components,
     /// unless the layer was told to serve that node from elsewhere (a root
     /// that is a setting, BR-RP-05).
-    func base(of node: VirtualNode) -> URL
+    func base(of node: some VirtualNodeConvertible) -> URL
 
     /// The owner's location as components below the ROOT — agnostic: no root,
     /// no OS. The single source every other form is rendered from.
@@ -175,6 +175,22 @@ public struct PathLayer: PathResolving {
         self.registry = registry
     }
 
+    /// The same layer, with the served-elsewhere nodes keyed by any
+    /// ``VirtualNodeConvertible`` (`[Tree.flows: url]`). A protocol existential
+    /// cannot be a `Dictionary` key, so this is generic over a `Hashable` key
+    /// type instead of widening the dictionary; two keys that name the same
+    /// node keep the later URL.
+    public init<Key: VirtualNodeConvertible & Hashable>(
+        root: URL,
+        nodeRoots: [Key: URL],
+        registry: VirtualPathRegistry = .empty
+    ) throws(VirtualPathError) {
+        try self.init(
+            root: root,
+            nodeRoots: Dictionary(nodeRoots.map { ($0.key.node, $0.value) }, uniquingKeysWith: { _, last in last }),
+            registry: registry)
+    }
+
     /// Builds the layer from settings strings, refusing a root that is blank,
     /// an unexpanded home shorthand, or relative — the three ways a root
     /// silently drifts to the working directory.
@@ -192,8 +208,9 @@ public struct PathLayer: PathResolving {
             registry: registry)
     }
 
-    public func base(of node: VirtualNode) -> URL {
-        nodeRoots[node] ?? node.path.fileURL(under: root)
+    public func base(of node: some VirtualNodeConvertible) -> URL {
+        let node = node.node
+        return nodeRoots[node] ?? node.path.fileURL(under: root)
     }
 
     /// A copy of this layer with `owners` added to the tree.

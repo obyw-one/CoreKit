@@ -82,8 +82,9 @@ public struct VirtualPathRegistry: Sendable, Equatable {
     }
 
     /// The registered kinds located directly on `node`.
-    public func entries(on node: VirtualNode) -> [Entry] {
-        entries.filter { $0.placement.node == node }
+    public func entries(on node: some VirtualNodeConvertible) -> [Entry] {
+        let node = node.node
+        return entries.filter { $0.placement.node == node }
     }
 }
 

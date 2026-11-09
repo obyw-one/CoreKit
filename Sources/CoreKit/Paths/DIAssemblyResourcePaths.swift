@@ -50,6 +50,19 @@ public struct DIAssemblyResourcePathsMock: DIAssembly {
             root: run.url, nodeRoots: nodeRoots, registry: VirtualPathRegistry(owners))
     }
 
+    /// ``init(run:nodeRoots:owners:)`` with the nodes keyed by any
+    /// ``VirtualNodeConvertible`` (`[Tree.flows: url]`).
+    public init<Key: VirtualNodeConvertible & Hashable>(
+        run: TestRunRoot,
+        nodeRoots: [Key: URL],
+        owners: [any VirtualPathOwning.Type]
+    ) throws(VirtualPathError) {
+        try self.init(
+            run: run,
+            nodeRoots: Dictionary(nodeRoots.map { ($0.key.node, $0.value) }, uniquingKeysWith: { _, last in last }),
+            owners: owners)
+    }
+
     public func assemble(container: Container, environment: DIEnvironment) {
         register(layer, in: container, assembly: "DIAssemblyResourcePathsMock")
     }

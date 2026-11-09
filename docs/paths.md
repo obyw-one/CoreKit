@@ -7,25 +7,18 @@ A typed thing **owns its path**; nobody else restates it. Production and test di
 ```swift
 import CoreKit
 
-enum Tree: CaseIterable {
+enum Tree: String, VirtualNodeNaming {
     case flows, state
-
-    var node: VirtualNode {
-        switch self {
-        case .flows: VirtualNode("flows")
-        case .state: VirtualNode("state")
-        }
-    }
 }
 
 /// A single resource: the static placement is the whole declaration.
 struct PlansLedger: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.state.node, name: "plans.json")
+    static let placement = VirtualPlacement(node: Tree.state, name: "plans.json")
 }
 
 /// An id-dependent one: the id is a folder AND part of the file name.
 struct FlowMetadata: VirtualPathOwning {
-    static let placement = VirtualPlacement(node: Tree.flows.node, name: "metadata.json")
+    static let placement = VirtualPlacement(node: Tree.flows, name: "metadata.json")
     let flowID: String
 
     func location() throws(VirtualPathError) -> VirtualPath {
@@ -36,6 +29,7 @@ struct FlowMetadata: VirtualPathOwning {
 
 The static `placement` (node + name) is what the registry keys on; the instance `location()` is the concrete path below the node.
 A node is a value, not a case of a closed enum, so a project defines its own scope kinds and the root of any of them can be moved by settings.
+A `String` enum conforming to `VirtualNodeNaming` names them by case (`Tree.state` is the node `state`), and every API that takes a node accepts it directly, with no `.node`; a nested node overrides `node` for that one case.
 
 ## Segments cannot climb
 
