@@ -63,8 +63,8 @@ public struct VirtualPlacement: Hashable, Sendable, Codable, CustomStringConvert
     public let node: VirtualNode
     public let name: PathSegment
 
-    public init(node: VirtualNode, name: PathSegment) {
-        self.node = node
+    public init(node: some VirtualNodeConvertible, name: PathSegment) {
+        self.node = node.node
         self.name = name
     }
 
