@@ -17,6 +17,44 @@
 
 set -euo pipefail
 
+# shikki-hook-chain — git feeds pre-push its ref pairs on STDIN, and stdin can
+# be read exactly once. This hook's own loop needs them AND `shi hook pre-push`
+# needs them (it rescans the pushed commit range for banned attribution
+# markers), so capture them here and feed both from the variable.
+PUSH_REFS="$(cat)"
+
+# shikki-hook-chain — the fleet attribution gate, FIRST.
+#
+# `shi hook pre-push` rescans every commit message in the pushed range for
+# banned attribution markers and for a missing CommitAttribution block. Its
+# exit code is the verdict.
+#
+# It runs BEFORE the lint work and not at the end, because the lint path exits
+# 0 early when a push touches no Swift files — which is most pushes to this
+# repo's docs, hooks and manifests. Measured on the very push that added this
+# chain: with the scan at the end, "No changed Swift files — nothing to lint.
+# Allowing." returned 0 and the attribution scan never ran. A gate reachable
+# only on some pushes is not a gate.
+#
+# WHY THIS EXISTS AT ALL. CoreKit had no commit-msg hook and no attribution
+# scan, so two commits on the resource-layer epic reached the operator's review
+# carrying the harness's default co-author trailer and fourteen more carried no
+# attribution block. `shi hook install` could not wire the guard: the resource
+# bundle beside the installed `shi` was five months stale, because `shi rebuild`
+# installed the binary and never refreshed it. Both ends are fixed now.
+#
+# Fails OPEN when `shi` is absent, so a contributor without shikki installed can
+# still push — commit-msg is the primary gate and this is the backstop.
+if command -v shi >/dev/null 2>&1; then
+    # No "$@": git passes pre-push the remote name and URL positionally, and
+    # `shi hook pre-push` takes only [--dry-run] — it exits 64 on them. The
+    # chaining instruction `shi hook install` prints says to forward "$@"; that
+    # instruction is wrong, and this hook's own first push is how it was found.
+    printf '%s\n' "$PUSH_REFS" | shi hook pre-push
+else
+    printf '[pre-push] notice: `shi` not on PATH — attribution scan skipped.\n'
+fi
+
 BOLD="\033[1m"; RED="\033[31m"; YELLOW="\033[33m"; GREEN="\033[32m"; CYAN="\033[36m"; RESET="\033[0m"
 ZERO="0000000000000000000000000000000000000000"
 
@@ -43,7 +81,7 @@ while read -r _local_ref local_sha _remote_ref _remote_sha; do
     if [ -n "$base" ]; then
         CHANGED+=$'\n'"$(git diff --name-only --diff-filter=ACMR "$base..$local_sha" -- '*.swift' 2>/dev/null || true)"
     fi
-done
+done <<< "$PUSH_REFS"
 
 # Dedupe, drop blanks, keep only files that still exist in the worktree AND
 # that the swiftlint config actually governs.
