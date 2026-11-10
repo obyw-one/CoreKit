@@ -43,7 +43,9 @@ public enum ResourceStoreError: Error, Sendable, CustomStringConvertible {
 
 /// ONE typed document: load it, save it, delete it. The document is the
 /// store's identity (the owner it was built for), so there is no key to pass —
-/// and a reader and a writer of the same owner cannot disagree about the model.
+/// and a reader and a writer of the same owner cannot disagree about the model,
+/// because the model is the owner's `Document` and not a parameter either of
+/// them picks (``VirtualDocumentOwning``).
 ///
 /// Missing is not an error: ``load()`` returns `nil` for a document that was
 /// never written, and ``delete()`` of an absent one is a no-op.
@@ -84,12 +86,15 @@ public struct OwnedResourceStore<Model: Codable & Sendable>: ResourceStoring {
     private let ioProfile: FileIOProfile
 
     /// - Parameters:
-    ///   - owner: the typed owner that declares where the document lives.
+    ///   - owner: the typed owner that declares where the document lives AND
+    ///     what it holds. `Model` is `Owner.Document`, so it cannot be chosen
+    ///     at the call site — see ``VirtualDocumentOwning`` for the review that
+    ///     closed that hole.
     ///   - paths: the injected path layer.
     ///   - ioProfile: the write profile; see ``FileIOProfile``.
-    public init<Owner: VirtualPathOwning>(
+    public init<Owner: VirtualDocumentOwning>(
         _ owner: Owner, paths: any PathResolving, ioProfile: FileIOProfile = .atomic
-    ) throws(VirtualPathError) {
+    ) throws(VirtualPathError) where Owner.Document == Model {
         url = try paths.url(for: owner)
         self.ioProfile = ioProfile
     }

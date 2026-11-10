@@ -106,6 +106,37 @@ public struct VirtualPlacement: Hashable, Sendable, Codable, CustomStringConvert
 /// What an owner does NOT declare: a root. The root is injected into the
 /// resolver, so prod and test differ by that one value and no owner's
 /// declaration ever changes (BR-RP-03).
+/// An owner whose file holds ONE typed document: the owner declares both WHERE
+/// it lives and WHAT is in it.
+///
+/// Review of #32 (operator, r4522435772): *"I as the system should be linked to
+/// the typed (Codable) models? where is the link to the metadata model here? …
+/// Why I see VirtualPathRegistry use typed model to register and it's not those
+/// model who register themselves with a protocol on them"*.
+///
+/// The second half was already true — ``VirtualPathOwning`` IS that protocol,
+/// and the placement is read off the type. The first half was not: the model
+/// was a free generic parameter of ``OwnedResourceStore``, chosen at the CALL
+/// SITE, so two stores for one owner could disagree about what the file
+/// contains. `OwnedResourceStore`'s own doc comment claimed *"a reader and a
+/// writer of the same owner cannot disagree about the model"* — which nothing
+/// enforced.
+///
+/// This refinement makes that claim true: `Document` is declared by the owner,
+/// so the address and the content type are one declaration and the store's
+/// `Model` is derived, never passed.
+///
+/// A REFINEMENT and not a requirement on ``VirtualPathOwning`` itself, because
+/// not every owner is a document: a directory owner, a lock file, a socket or
+/// an opaque blob has a path and no `Codable` payload, and forcing an
+/// associated type on those would be a fabricated `Document` nobody reads.
+public protocol VirtualDocumentOwning: VirtualPathOwning {
+    /// The one model this owner's file holds.
+    associatedtype Document: Codable & Sendable
+}
+
+// MARK: - VirtualPathOwning
+
 public protocol VirtualPathOwning: Sendable {
 
     /// The kind's node and name. STATIC: the registry reads it without an instance.

@@ -15,11 +15,13 @@ private enum Tree: String, VirtualNodeNaming {
     case state, flows
 }
 
-private struct LedgerFile: VirtualPathOwning {
+private struct LedgerFile: VirtualDocumentOwning {
+    typealias Document = Ledger
     static let placement = VirtualPlacement(node: Tree.state, name: "ledger.json")
 }
 
-private struct FlowLedger: VirtualPathOwning {
+private struct FlowLedger: VirtualDocumentOwning {
+    typealias Document = Ledger
     static let placement = VirtualPlacement(node: Tree.flows, name: "ledger.json")
     let flowID: String
 
@@ -28,7 +30,8 @@ private struct FlowLedger: VirtualPathOwning {
     }
 }
 
-private struct Unregistered: VirtualPathOwning {
+private struct Unregistered: VirtualDocumentOwning {
+    typealias Document = Ledger
     static let placement = VirtualPlacement(node: Tree.state, name: "unregistered.json")
 }
 
@@ -224,5 +227,44 @@ struct OwnedResourceStoreTests {
         #expect(try await store.load() == sample)
         try await store.delete()
         #expect(await !store.exists())
+    }
+}
+
+// MARK: - VirtualDocumentOwningTests
+
+/// Review of #32 (r4522435772): the owner declares the document type, so a
+/// store's `Model` is derived and not chosen by whoever constructs it.
+@Suite("VirtualDocumentOwning — one declaration for the address AND the model")
+struct VirtualDocumentOwningTests {
+
+    @Test("the model comes from the owner, so the store needs no type argument")
+    func modelIsDerivedFromTheOwner() throws {
+        let box = try Sandbox()
+        defer { box.sweep() }
+        // No `<Ledger>`: the type is `LedgerFile.Document`. A second reader of
+        // the same owner cannot name a different model — it would not compile.
+        let store = try OwnedResourceStore(LedgerFile(), paths: box.paths)
+        try store.save(sample)
+        #expect(try store.load() == sample)
+        #expect(LedgerFile.Document.self == Ledger.self)
+    }
+
+    @Test("a document owner is still a path owner — the registry and the resolver are unchanged")
+    func documentOwnerIsAPathOwner() throws {
+        let box = try Sandbox()
+        defer { box.sweep() }
+        // The refinement adds the model; it does not change WHERE anything is.
+        #expect(try box.paths.url(for: LedgerFile()).lastPathComponent == "ledger.json")
+        #expect(try VirtualPathRegistry([LedgerFile.self]).contains(LedgerFile.self))
+    }
+
+    @Test("an id-dependent document owner derives its model the same way")
+    func idDependentOwnerDerivesItsModel() throws {
+        let box = try Sandbox()
+        defer { box.sweep() }
+        let store = try OwnedResourceStore(FlowLedger(flowID: "7f3a"), paths: box.paths)
+        try store.save(sample)
+        #expect(store.url.lastPathComponent == "7f3a-ledger.json")
+        #expect(try store.load() == sample)
     }
 }
