@@ -46,7 +46,11 @@ PUSH_REFS="$(cat)"
 # Fails OPEN when `shi` is absent, so a contributor without shikki installed can
 # still push — commit-msg is the primary gate and this is the backstop.
 if command -v shi >/dev/null 2>&1; then
-    printf '%s\n' "$PUSH_REFS" | shi hook pre-push "$@"
+    # No "$@": git passes pre-push the remote name and URL positionally, and
+    # `shi hook pre-push` takes only [--dry-run] — it exits 64 on them. The
+    # chaining instruction `shi hook install` prints says to forward "$@"; that
+    # instruction is wrong, and this hook's own first push is how it was found.
+    printf '%s\n' "$PUSH_REFS" | shi hook pre-push
 else
     printf '[pre-push] notice: `shi` not on PATH — attribution scan skipped.\n'
 fi
