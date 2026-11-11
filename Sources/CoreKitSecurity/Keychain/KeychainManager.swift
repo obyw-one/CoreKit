@@ -7,15 +7,21 @@
 
 #if canImport(Security)
 
+import CoreKit
 import Foundation
 import Security
-import CoreKit
 
 /// Protocol for keychain access operations.
+///
+/// The requirements are `async` so a test double can be an `actor` the compiler
+/// checks, instead of an `NSLock` behind `@unchecked Sendable` — a box that only
+/// exists because a callback is synchronous (CoreKit#39 review). The real
+/// ``KeychainManager`` keeps its synchronous Security-framework calls: a
+/// synchronous method satisfies an `async` requirement.
 public protocol KeychainManagerProtocol: Sendable {
-    func save(_ value: String, for key: String) throws
-    func get(_ key: String) -> String?
-    func delete(_ key: String) throws
+    func save(_ value: String, for key: String) async throws
+    func get(_ key: String) async -> String?
+    func delete(_ key: String) async throws
 }
 
 /// Thin wrapper around the Security framework keychain APIs.
@@ -39,7 +45,7 @@ nonisolated public struct KeychainManager: KeychainManagerProtocol, Sendable {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: valueData,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
         if let accessGroup {
@@ -63,7 +69,7 @@ nonisolated public struct KeychainManager: KeychainManagerProtocol, Sendable {
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
         if let accessGroup {
@@ -84,7 +90,7 @@ nonisolated public struct KeychainManager: KeychainManagerProtocol, Sendable {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key
+            kSecAttrAccount as String: key,
         ]
 
         if let accessGroup {

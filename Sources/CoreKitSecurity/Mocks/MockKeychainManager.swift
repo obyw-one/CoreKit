@@ -11,45 +11,38 @@ import Foundation
 
 /// In-memory mock of ``KeychainManagerProtocol`` for unit tests.
 ///
-/// Thread-safe via an actor-isolated dictionary behind `@unchecked Sendable`.
-public final class MockKeychainManager: KeychainManagerProtocol, @unchecked Sendable {
+/// An `actor`: its isolation is checked by the compiler. It used to be a class
+/// behind `@unchecked Sendable` and an `NSLock` (CoreKit#39 review), which was
+/// only necessary while the protocol's requirements were synchronous.
+public actor MockKeychainManager: KeychainManagerProtocol {
 
-    private let lock = NSLock()
     private var store: [String: String] = [:]
 
     public init() {}
 
     public func save(_ value: String, for key: String) throws {
-        lock.lock()
-        defer { lock.unlock() }
         store[key] = value
     }
 
     public func get(_ key: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
-        return store[key]
+        store[key]
     }
 
     public func delete(_ key: String) throws {
-        lock.lock()
-        defer { lock.unlock() }
         guard store.removeValue(forKey: key) != nil else {
             throw KeychainError.itemNotFound
         }
     }
 
-    /// Returns the number of items currently stored (useful for test assertions).
-    public var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return store.count
-    }
+    /// The number of items currently stored (useful for test assertions).
+    public var count: Int { store.count }
+
+    /// Whether nothing is stored — what SwiftLint's `empty_count` rewrites
+    /// `count == 0` to, so the mock answers it directly.
+    public var isEmpty: Bool { store.isEmpty }
 
     /// Removes all stored items.
     public func reset() {
-        lock.lock()
-        defer { lock.unlock() }
         store.removeAll()
     }
 }

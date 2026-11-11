@@ -97,7 +97,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CoreKitSecurityTests",
-            dependencies: ["CoreKitSecurity", "CoreKit"]
+            dependencies: ["CoreKitSecurity", "CoreKit", "CoreKitTestSupport"]
         ),
         .testTarget(
             name: "CoreKitUITests",
