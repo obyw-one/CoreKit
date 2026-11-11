@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.15.0 (2026-11-11): CoreKitSecurity
+
+### Added
+- **`CoreKitSecurity`**, an Apple-only product (`#if canImport(Security)`; empty on Linux): `KeychainManager`, `AuthPersistenceManager<User>`, `KeychainError`, `AuthPersistenceError`, and the `MockKeychainManager` / `MockAuthPersistenceManager` test doubles. It absorbs the standalone **SecurityKit**, which is archived.
+
+### Moving from SecurityKit
+The types keep their names; three things change:
+1. `import SecurityKit` becomes `import CoreKitSecurity`, and the dependency becomes CoreKit's `CoreKitSecurity` product.
+2. `KeychainManagerProtocol` and `AuthPersistenceManagerProtocol` requirements are **`async`**: callers `await` them. The mocks are actors (no `@unchecked Sendable`, no lock); a conformer with synchronous methods, like `KeychainManager`, still satisfies the protocol.
+3. `AuthPersistenceManager(keychainManager:cacheRepository:)` takes the cache **explicitly**. SecurityKit defaulted it to `CacheRepository("user", invalidateTime: .never)`, the no-directory form 0.14.0 deprecated, which throws on every save when no `PathResolving` is registered. Pass `CacheRepository<User>("user", invalidateTime: .never, baseDirectory:)` or `in: paths`.
+
 ## 0.14.0 (2026-11-11): the fleet resource layer (spec d3f8a1b2)
 
 ### License
