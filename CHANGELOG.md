@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased: the fleet resource layer (spec d3f8a1b2)
+## 0.14.0 (2026-11-11): the fleet resource layer (spec d3f8a1b2)
+
+### License
+- CoreKit is **Apache-2.0** from this release (was AGPL-3.0-or-later, #33), so a product can link it without taking on the AGPL. See `NOTICE`. 0.13.0 and earlier stay under the license they were published with.
+
+### Upgrading from 0.13
+Pre-1.0, so a minor carries breaking changes. Three things can stop a consumer from compiling or change its behaviour, all detailed below:
+1. Calls through `DrainClock`, `DeviceCapacityProbing`, `AppConfigServiceProtocol` or `ResourceStoring` now `await`.
+2. `CacheRepository` with no `baseDirectory:` warns, and **throws** when no `PathResolving` is registered: it no longer falls back to the documents folder.
+3. A `.weak` DI registration of a value type throws on resolve instead of silently acting as `.transient`.
 
 ### Added
 - **Paths**: `VirtualPathOwning`, `VirtualPathRegistry`, `PathResolving` / `PathLayer` over an injected root, `PathSegment`, `VirtualPath`, `PathContainment`, `ResourceAddress` (bucket, node id, key), `TestRunRoot`, `OwnedResourceStore`.
@@ -30,6 +39,7 @@ Files written by the old default live in the documents folder as `<name>-<id>.ca
 
 - `Container`: the `.weak` scope held a value type through `as AnyObject`, which boxes into a temporary nothing retains, so the factory re-ran on every resolve (a silent `.transient`). Resolving a `.weak` registration whose instance is not a class now throws `ContainerError.invalidRegistration`. (Registration cannot reject it: in a generic context Swift cannot tell a concrete struct from a protocol type.)
 - `S3ObjectStoreClient`: `a//b`, `a/b/` and `a/b` addressed the same object, because empty key components were dropped. A key with an empty component is now refused with `S3ObjectStoreError.invalidKey` by every verb, before anything is sent.
+- Kagami registry: `VirtualDocumentOwningTests` was in no scope's filter, so kagami never ran it on macOS; `ScopeCoverageRatchetTests` caught it on Linux.
 - Kagami registry: five test directories and four suites in `CoreKitCache`'s directory were run by no scope. Every file under `Tests/` now belongs to exactly one scope (new `CoreKitConcurrency`, `CoreKitPaths`, `CoreKitGate`), and `ScopeCoverageRatchetTests` fails if a test file or a suite is left out.
 
 ### Changed (concurrency)
