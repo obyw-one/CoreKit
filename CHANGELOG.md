@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.0 (2026-11-11): CoreKit ships no S3 transport
+
+### Removed: `URLSessionS3Transport` moves to NetKit
+CoreKit keeps `S3Transport`, `AWSSignatureV4`, the request/response types and the listing parser, and ships no transport. `S3ObjectStoreClient(transport:)` already took the transport as a required argument; the `URLSession` one now lives in NetKit (`import NetKit`; the module is `NetKit`, its directory `NetworkKit`), declared identically, `init(session:)` included.
+
+**Source-breaking for a caller of `URLSessionS3Transport` from CoreKit 0.14.0 or 0.15.0**, the two releases that shipped it: add NetKit and `import NetKit`. No fleet product uses it (searched every workspace's `Sources`, 2026-11-11). The order is CoreKit first: while a CoreKit that still declares the type is resolved, NetKit's copy is ambiguous and does not compile (measured on obyw-one/NetKit#20 against 0.15.0).
+
 ## 0.15.0 (2026-11-11): CoreKitSecurity
 
 ### Added
