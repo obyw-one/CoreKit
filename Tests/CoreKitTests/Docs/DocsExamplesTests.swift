@@ -12,13 +12,14 @@ private func record(_ evidence: Evidence, in cache: some RepositoryProtocol<Stri
 }
 
 private func evidenceCache(
-    endpoint: URL, region: String, accessKey: String, secretKey: String, node: NodeID
+    endpoint: URL, region: String, credentials: S3Credentials, node: NodeID,
+    transport: any S3Transport
 ) throws -> AsyncCacheRepository<Evidence> {
     let client = try S3ObjectStoreClient(
         endpoint: endpoint,
         region: region,
-        credentials: S3Credentials(accessKey: accessKey, secretKey: secretKey),
-        transport: URLSessionS3Transport(),
+        credentials: credentials,
+        transport: transport,
         clock: { Date() })
     let backing = ObjectStoreCacheBacking(client: client, bucket: "evidence", node: node)
     return AsyncCacheRepository<Evidence>("evidence", invalidateTime: .never, envelope: .raw, backing: backing)
@@ -90,7 +91,8 @@ struct DocsExamplesTests {
         components.host = "store.example.test"
         components.port = 3900
         let endpoint = try #require(components.url)
-        let cache = try evidenceCache(endpoint: endpoint, region: "test-region", accessKey: "key", secretKey: "secret", node: "mac-a")
+        let cache = try evidenceCache(endpoint: endpoint, region: "test-region", credentials: S3Credentials(accessKey: "key", secretKey: "secret"), node: "mac-a",
+            transport: FakeS3Transport(accessKey: "key", host: "store.example.test:3900"))
         #expect(cache.name == "evidence")
     }
 
