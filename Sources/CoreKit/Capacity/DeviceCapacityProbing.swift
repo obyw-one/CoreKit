@@ -17,5 +17,10 @@ public protocol DeviceCapacityProbing: Sendable {
     /// Read one fresh snapshot at this instant. Never cached — the same
     /// device gives a different honest answer idle vs under pressure
     /// (BR-CP-03), so callers control cadence.
-    func probe() -> DeviceCapacitySnapshot
+    ///
+    /// Async so a prober with state (a test double that walks through pressure
+    /// levels) can be an actor; a prober that only reads the platform
+    /// (`PlatformCapacityProber`) keeps a synchronous `probe()`, which satisfies
+    /// this requirement.
+    func probe() async -> DeviceCapacitySnapshot
 }

@@ -1,3 +1,4 @@
+import CoreKitTestSupport
 import XCTest
 @testable import CoreKit
 
@@ -18,8 +19,8 @@ final class CacheNamingCodecTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cache-naming-codec-\(UUID().uuidString)")
+        dir = TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "cache-naming-codec-\(UUID().uuidString)", directoryHint: .notDirectory)
     }
 
     override func tearDown() {
@@ -32,23 +33,23 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testLegacyNamingUnchanged() throws {
         let cache = CacheRepository<TestModel>(
-            "unit", invalidateTime: .never, baseDirectory: dir, envelope: .raw
+            "unit", invalidateTime: .never, baseDirectory: dir!, envelope: .raw
         )
         try cache.save("a", data: TestModel(id: 1, name: "x"))
         XCTAssertTrue(
-            FileManager.default.fileExists(atPath: dir.appendingPathComponent("unit-a.cache").path),
+            FileManager.default.fileExists(atPath: dir.appending(path: "unit-a.cache", directoryHint: .notDirectory).path),
             "default naming must stay the historical <name>-<id>.cache"
         )
     }
 
     func testBareIdWithExtension() throws {
         let cache = CacheRepository<TestModel>(
-            "ignored", invalidateTime: .never, baseDirectory: dir,
+            "ignored", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .bareId(ext: "json")
         )
         try cache.save("pr-7.dossier", data: TestModel(id: 7, name: "d"))
         XCTAssertTrue(
-            FileManager.default.fileExists(atPath: dir.appendingPathComponent("pr-7.dossier.json").path)
+            FileManager.default.fileExists(atPath: dir.appending(path: "pr-7.dossier.json", directoryHint: .notDirectory).path)
         )
         XCTAssertEqual(try cache.get("pr-7.dossier"), TestModel(id: 7, name: "d"))
     }
@@ -56,24 +57,24 @@ final class CacheNamingCodecTests: XCTestCase {
     func testBareIdVerbatim_dotfileContract() throws {
         // The shikki BR-11 case: the id IS the whole contractual filename.
         let cache = CacheRepository<TestModel>(
-            "ignored", invalidateTime: .never, baseDirectory: dir,
+            "ignored", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .bareId()
         )
         try cache.save(".shikki-unit.json", data: TestModel(id: 1, name: "w1"))
         XCTAssertTrue(
-            FileManager.default.fileExists(atPath: dir.appendingPathComponent(".shikki-unit.json").path)
+            FileManager.default.fileExists(atPath: dir.appending(path: ".shikki-unit.json", directoryHint: .notDirectory).path)
         )
         XCTAssertEqual(try cache.get(".shikki-unit.json"), TestModel(id: 1, name: "w1"))
     }
 
     func testCustomNaming() throws {
         let cache = CacheRepository<TestModel>(
-            "ballots", invalidateTime: .never, baseDirectory: dir,
+            "ballots", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .custom { name, id in "\(name)~\(id).v2" }
         )
         try cache.save("42", data: TestModel(id: 42, name: "c"))
         XCTAssertTrue(
-            FileManager.default.fileExists(atPath: dir.appendingPathComponent("ballots~42.v2").path)
+            FileManager.default.fileExists(atPath: dir.appending(path: "ballots~42.v2", directoryHint: .notDirectory).path)
         )
         XCTAssertEqual(try cache.get("42"), TestModel(id: 42, name: "c"))
     }
@@ -82,7 +83,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testHumanReadableCodec_iso8601RoundTripAndShape() throws {
         let cache = CacheRepository<DatedModel>(
-            "manifest", invalidateTime: .never, baseDirectory: dir,
+            "manifest", invalidateTime: .never, baseDirectory: dir!,
             envelope: .raw, naming: .bareId(ext: "json"), codec: .humanReadable
         )
         let stamp = Date(timeIntervalSince1970: 1_753_000_000)
@@ -97,7 +98,7 @@ final class CacheNamingCodecTests: XCTestCase {
         // The file bytes carry the human contract: iso8601 date string,
         // pretty-printed (newlines), sorted keys ("name" before "stamp").
         let bytes = try String(
-            contentsOf: dir.appendingPathComponent("m.json"), encoding: .utf8
+            contentsOf: dir.appending(path: "m.json", directoryHint: .notDirectory), encoding: .utf8
         )
         XCTAssertTrue(bytes.contains("T"), "date must be an iso8601 string, not a numeric interval")
         XCTAssertTrue(bytes.contains("\n"), "pretty-printed output expected")
@@ -111,11 +112,11 @@ final class CacheNamingCodecTests: XCTestCase {
         // Guard: default codec must stay the bare encoder — existing .raw
         // corpora (numeric dates, compact) keep decoding.
         let cache = CacheRepository<DatedModel>(
-            "raw", invalidateTime: .never, baseDirectory: dir, envelope: .raw
+            "raw", invalidateTime: .never, baseDirectory: dir!, envelope: .raw
         )
         try cache.save("d", data: DatedModel(name: "n", stamp: Date()))
         let bytes = try String(
-            contentsOf: dir.appendingPathComponent("raw-d.cache"), encoding: .utf8
+            contentsOf: dir.appending(path: "raw-d.cache", directoryHint: .notDirectory), encoding: .utf8
         )
         XCTAssertFalse(bytes.contains("\n"), "default .raw output must stay compact")
     }
@@ -124,7 +125,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testRawStringVerbatimMarkdown() throws {
         let cache = CacheRepository<String>(
-            "ballot", invalidateTime: .never, baseDirectory: dir,
+            "ballot", invalidateTime: .never, baseDirectory: dir!,
             envelope: .rawString, naming: .bareId(ext: "md")
         )
         let markdown = "# Ballot\n\n- [ ] item one\n- [x] item two\n"
@@ -132,7 +133,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
         // The file IS the markdown — no JSON quoting/escaping.
         let bytes = try String(
-            contentsOf: dir.appendingPathComponent("pr-9-abc123.md"), encoding: .utf8
+            contentsOf: dir.appending(path: "pr-9-abc123.md", directoryHint: .notDirectory), encoding: .utf8
         )
         XCTAssertEqual(bytes, markdown)
         XCTAssertEqual(try cache.get("pr-9-abc123"), markdown)
@@ -140,7 +141,7 @@ final class CacheNamingCodecTests: XCTestCase {
 
     func testRawStringRejectsNonStringModel() throws {
         let cache = CacheRepository<TestModel>(
-            "bad", invalidateTime: .never, baseDirectory: dir, envelope: .rawString
+            "bad", invalidateTime: .never, baseDirectory: dir!, envelope: .rawString
         )
         XCTAssertThrowsError(try cache.save("x", data: TestModel(id: 1, name: "no"))) { error in
             XCTAssertEqual(error as? CacheRepositoryError, .encodedError)

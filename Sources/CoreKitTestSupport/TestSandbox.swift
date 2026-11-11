@@ -27,8 +27,8 @@ public struct TestSandbox: Sendable {
     public static func make(under testsRoot: URL) throws -> TestSandbox {
         let sandboxID = UUID().uuidString.lowercased()
         let root = testsRoot.standardizedFileURL
-            .appendingPathComponent(TestScratch.runsSegment, isDirectory: true)
-            .appendingPathComponent(sandboxID, isDirectory: true)
+            .appending(path: TestScratch.runsSegment, directoryHint: .isDirectory)
+            .appending(path: sandboxID, directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return TestSandbox(root: root, sandboxID: sandboxID)
     }

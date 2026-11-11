@@ -6,11 +6,6 @@
 //
 
 import Foundation
-#if canImport(Darwin)
-import Darwin
-#elseif canImport(Glibc)
-import Glibc
-#endif
 
 // MARK: - Protocol
 
@@ -171,125 +166,64 @@ public struct CacheCodec: Sendable, Equatable {
     }
 }
 
-// MARK: - Internal Container
-
-private struct CacheContainerModel<ModelType: Codable & Sendable>: Codable, Sendable {
-    var timestamp: TimeInterval
-    var modelType: String
-    var body: String // Serialized ref of ModelType data
-    var invalideTime: InvalidateTime
-    var readCount: Int
-
-    nonisolated init(data: ModelType, invalideTime: InvalidateTime, readCount: Int = 0, timestamp: TimeInterval = Date().timeIntervalSince1970) throws {
-        do {
-            let serializedData = try JSONEncoder().encode(data)
-            let serializedStr = String(data: serializedData, encoding: .utf8)
-            guard let serialized = serializedStr, !serialized.isEmpty else {
-                throw CacheRepositoryError.encodedError
-            }
-
-            self.timestamp = timestamp
-            self.modelType = String(describing: type(of: data.self))
-            self.body = serialized
-            self.invalideTime = invalideTime
-            self.readCount = readCount
-        } catch let error as CacheRepositoryError {
-            throw error
-        } catch {
-            AppLog.cache.error("Cache error: \(error)")
-            throw CacheRepositoryError.cannotCreateCache
-        }
-    }
-
-    nonisolated func decoded() throws -> ModelType {
-        guard let data = body.data(using: .utf8) else {
-            throw CacheRepositoryError.decodedError
-        }
-        return try JSONDecoder().decode(ModelType.self, from: data)
-    }
-
-    /// Explicit Codable implementation to prevent main actor isolation
-    private enum CodingKeys: String, CodingKey {
-        case timestamp
-        case modelType
-        case body
-        case invalideTime
-        case readCount
-    }
-
-    nonisolated init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        timestamp = try container.decode(TimeInterval.self, forKey: .timestamp)
-        modelType = try container.decode(String.self, forKey: .modelType)
-        body = try container.decode(String.self, forKey: .body)
-        invalideTime = try container.decode(InvalidateTime.self, forKey: .invalideTime)
-        readCount = try container.decode(Int.self, forKey: .readCount)
-    }
-
-    nonisolated func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(timestamp, forKey: .timestamp)
-        try container.encode(modelType, forKey: .modelType)
-        try container.encode(body, forKey: .body)
-        try container.encode(invalideTime, forKey: .invalideTime)
-        try container.encode(readCount, forKey: .readCount)
-    }
-}
-
 // MARK: - CacheRepository
 
-nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositoryProtocol, @unchecked Sendable {
+/// The synchronous cache: a model per entry, over a ``SynchronousCacheBacking``.
+///
+/// The usual backing is a local folder, and every call that names its
+/// `baseDirectory:` builds exactly that and behaves exactly as before. The
+/// backing is swappable (BR-RP-11): pass any ``SynchronousCacheBacking`` to the
+/// `backing:` initialiser and nothing else about the consumer changes. A
+/// backing that can only answer asynchronously — a database, an object store —
+/// is used through ``AsyncCacheRepository``, which speaks the same envelope, TTL
+/// and naming over it.
+///
+/// A cache with no directory at all is the deprecated legacy form: see the
+/// deprecated initialiser and ``CacheDirectory``.
+nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositoryProtocol {
     public typealias ModelType = T
 
-    /// Name of the file where cached data is saved.
-    public let name: String
+    private let engine: CacheEntryEngine<T>
+    private let location: Result<any SynchronousCacheBacking, CacheLocationError>
+    private let requestedProfile: FileIOProfile
 
-    /// Directory URL under which cache files are written.
-    ///
-    /// Resolved at init time from (in order):
-    ///  1. the caller-supplied `directory:` (created if missing)
-    ///  2. the process's `.documentDirectory`
-    ///  3. the process's `temporaryDirectory` (safe fallback — replaces the
-    ///     pre-existing `.first!` force-unwrap so sandboxed / non-app
-    ///     environments where `.documentDirectory` returns an empty array
-    ///     no longer crash)
-    private let baseDirectory: URL
+    /// Name of the cache — the stem of every legacy entry name.
+    public var name: String { engine.name }
 
     /// Time-to-live policy for cache invalidation.
-    private(set) var invalidateTime: InvalidateTime
+    var invalidateTime: InvalidateTime { engine.invalidateTime }
 
     /// On-disk shape (see `EnvelopeMode`).
-    public let envelope: EnvelopeMode
+    public var envelope: EnvelopeMode { engine.envelope }
 
     /// Filename derivation (see `FileNaming`). `.legacy` by default.
-    public let naming: FileNaming
+    public var naming: FileNaming { engine.naming }
 
     /// JSON codec configuration — honored by `.raw` only (see `CacheCodec`).
-    public let codec: CacheCodec
+    public var codec: CacheCodec { engine.codec }
 
     /// Write-path profile controlling crash-atomicity and cross-process
-    /// exclusion. Default is `.atomic` — EXACTLY today's behavior.
-    /// See ``FileIOProfile`` for per-case guidance.
-    public let ioProfile: FileIOProfile
+    /// exclusion. Default is `.atomic` — EXACTLY today's behavior. A backing
+    /// that has no file write reports `.atomic`, which is what it guarantees: a
+    /// save is all-or-nothing. See ``FileIOProfile`` for per-case guidance.
+    public var ioProfile: FileIOProfile {
+        if case .success(let backing) = location { return backing.fileIOProfile ?? .atomic }
+        return requestedProfile
+    }
 
-    /// Create a `CacheRepository`.
+    /// Create a `CacheRepository` over a local folder you name.
     ///
     /// - Parameters:
     ///   - name: filename stem — every entry is written as `"<name>-<id>.cache"`.
     ///   - invalidateTime: TTL policy. Default is `.inTime(ttl: 7 days)`.
     ///     See `InvalidateTime` for per-case guidance.
-    ///   - baseDirectory: destination directory for cache files. `nil` (default)
-    ///     keeps the historical behavior (`.documentDirectory`, with a
-    ///     `temporaryDirectory` safe fallback if unavailable). A non-nil URL
-    ///     stores files under that directory and creates it if missing —
-    ///     useful when the caller manages an explicit typed store location
-    ///     (Application Support subdirectory, XDG cache path, workspace-
-    ///     scoped directory, unit-test temp dir).
+    ///   - baseDirectory: destination directory for cache files; created if
+    ///     missing. Pass the directory your path layer resolved, an
+    ///     Application Support subdirectory, or a unit-test scratch folder.
     ///   - envelope: on-disk shape. Default is `.container` — the historical
     ///     `CacheContainerModel` metadata envelope. `.raw` writes the model's
     ///     JSON directly so the file is `cat`/`jq`-able. See `EnvelopeMode`
-    ///     for per-case guidance. Existing 2-arg call sites keep `.container`
-    ///     automatically (back-compat preserved).
+    ///     for per-case guidance.
     ///   - naming: filename derivation. `.legacy` (default) keeps the
     ///     historical `"<name>-<id>.cache"`; `.bareId`/`.custom` exist for
     ///     stores whose filename is a contract (see `FileNaming`).
@@ -303,99 +237,156 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
     public init(
         _ name: String,
         invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        baseDirectory: URL,
+        envelope: EnvelopeMode = .container,
+        naming: FileNaming = .legacy,
+        codec: CacheCodec = .default,
+        ioProfile: FileIOProfile = .atomic
+    ) {
+        self.init(
+            name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+            requestedProfile: ioProfile,
+            location: .success(LocalFolderCacheBacking(directory: baseDirectory, ioProfile: ioProfile)))
+    }
+
+    /// Create a `CacheRepository` whose directory the injected path layer owns:
+    /// `paths`' root, then the ``CacheDirectory`` node. The layer must have
+    /// ``CacheDirectory`` in its registry; if it cannot resolve it, every
+    /// operation throws ``CacheLocationError/unresolvable(cache:reason:)``
+    /// naming why — no other folder is tried.
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        in paths: any PathResolving,
+        envelope: EnvelopeMode = .container,
+        naming: FileNaming = .legacy,
+        codec: CacheCodec = .default,
+        ioProfile: FileIOProfile = .atomic
+    ) {
+        let location: Result<any SynchronousCacheBacking, CacheLocationError>
+        do {
+            let directory = try paths.url(for: CacheDirectory())
+            location = .success(LocalFolderCacheBacking(directory: directory, ioProfile: ioProfile))
+        } catch {
+            location = .failure(.unresolvable(cache: name, reason: error.description))
+        }
+        self.init(
+            name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+            requestedProfile: ioProfile, location: location)
+    }
+
+    /// The historical initialiser, whose `baseDirectory` could be left out.
+    ///
+    /// Left out (or `nil`), the directory used to be the app's documents folder,
+    /// a default nobody chose. It now resolves through the ``PathResolving``
+    /// registered in the dependency container (``CacheDirectory``), and when
+    /// none is registered every operation throws
+    /// ``CacheLocationError/noPathLayerRegistered(cache:)`` — never a fallback
+    /// folder. A call that passes a real `baseDirectory:` is unchanged, and is
+    /// served by the non-deprecated initialiser above.
+    @available(*, deprecated, message: """
+        Relying on the default cache directory is deprecated. Pass `baseDirectory:` (the directory your path layer resolved),         or `in:` the PathResolving that owns a CacheDirectory. A nil directory now resolves through the PathResolving         registered in DI, and throws CacheLocationError when none is.
+        """)
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
         baseDirectory: URL? = nil,
         envelope: EnvelopeMode = .container,
         naming: FileNaming = .legacy,
         codec: CacheCodec = .default,
         ioProfile: FileIOProfile = .atomic
     ) {
-        self.name = name
-        self.invalidateTime = invalidateTime
-        self.envelope = envelope
-        self.naming = naming
-        self.codec = codec
-        self.ioProfile = ioProfile
-
-        // Resolve storage directory with a safe fallback chain — no more `.first!`.
-        let resolved: URL
         if let baseDirectory {
-            resolved = baseDirectory
-        } else if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
-            resolved = docs
+            self.init(
+                name, invalidateTime: invalidateTime, baseDirectory: baseDirectory, envelope: envelope, naming: naming,
+                codec: codec, ioProfile: ioProfile)
+        } else if let paths = Container.default.resolveOptional((any PathResolving).self) {
+            self.init(
+                name, invalidateTime: invalidateTime, in: paths, envelope: envelope, naming: naming, codec: codec,
+                ioProfile: ioProfile)
         } else {
-            resolved = FileManager.default.temporaryDirectory
-            AppLog.cache.warning("CacheRepository: .documentDirectory unavailable — falling back to temporaryDirectory at \(resolved.path)")
-        }
-        self.baseDirectory = resolved
-
-        // Best-effort mkdir -p. If this fails, subsequent `save` writes will
-        // surface the underlying FileManager error via `encodedError`.
-        if !FileManager.default.fileExists(atPath: resolved.path) {
-            do {
-                try FileManager.default.createDirectory(at: resolved, withIntermediateDirectories: true)
-            } catch {
-                AppLog.cache.warning("CacheRepository: could not create directory \(resolved.path): \(error)")
-            }
+            self.init(
+                name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+                requestedProfile: ioProfile, location: .failure(.noPathLayerRegistered(cache: name)))
         }
     }
 
+    /// Create a `CacheRepository` over an injected synchronous backing
+    /// (BR-RP-11). There is no default backing here: where the bytes live is
+    /// the caller's decision.
+    public init(
+        _ name: String,
+        invalidateTime: InvalidateTime = .inTime(ttl: 7 * 24 * 60 * 60),
+        envelope: EnvelopeMode = .container,
+        naming: FileNaming = .legacy,
+        codec: CacheCodec = .default,
+        backing: some SynchronousCacheBacking
+    ) {
+        self.init(
+            name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec,
+            requestedProfile: backing.fileIOProfile ?? .atomic, location: .success(backing))
+    }
+
+    private init(
+        _ name: String,
+        invalidateTime: InvalidateTime,
+        envelope: EnvelopeMode,
+        naming: FileNaming,
+        codec: CacheCodec,
+        requestedProfile: FileIOProfile,
+        location: Result<any SynchronousCacheBacking, CacheLocationError>
+    ) {
+        engine = CacheEntryEngine(
+            name: name, invalidateTime: invalidateTime, envelope: envelope, naming: naming, codec: codec)
+        self.requestedProfile = requestedProfile
+        self.location = location
+    }
+
+    // MARK: - CacheRepositoryProtocol
+
     nonisolated public func exists(_ id: String) -> Bool {
-        let fileUrl = self.fileUrl(id)
-        return FileManager.default.fileExists(atPath: fileUrl.relativePath)
+        let entry = engine.entry(for: id)
+        do {
+            return try backing().contains(entry)
+        } catch {
+            AppLog.cache.error("Cache exists check failed for \(entry): \(error)")
+            return false
+        }
     }
 
     /// Enumerate every record this cache holds (``RepositoryProtocol/list()``).
-    /// Scans the document directory for this cache's `<name>-<id>.cache`
-    /// files and decodes each container; entries that fail to decode or have
-    /// expired are skipped rather than failing the whole enumeration.
+    /// Scans the backing for this cache's `<name>-<id>.cache` entries and
+    /// decodes each container; entries that fail to decode or have expired are
+    /// skipped (and logged) rather than failing the whole enumeration.
     nonisolated public func list() throws -> [ModelType] {
-        let fm = FileManager.default
-        let prefix = name + "-"
-        let entries = (try? fm.contentsOfDirectory(
-            at: baseDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )) ?? []
+        let backing = try backing()
+        let names: [String]
+        do {
+            names = try backing.names()
+        } catch {
+            AppLog.cache.error("Cache list could not enumerate the backing: \(error)")
+            return []
+        }
         var out: [ModelType] = []
-        for url in entries {
-            let filename = url.lastPathComponent
-            guard filename.hasPrefix(prefix), filename.hasSuffix(".cache"), let data = try? Data(contentsOf: url),
-                  var container = try? JSONDecoder()
-                .decode(CacheContainerModel<ModelType>.self, from: data),
-                  (try? cacheIsValid(&container, hasNetwork: true)) == true
-            else { continue }
-            if let model = try? container.decoded() { out.append(model) }
+        for entry in names where engine.isListable(entry) {
+            do {
+                guard let blob = try backing.read(entry) else { continue }
+                if let model = engine.listedModel(from: blob, entry: entry) { out.append(model) }
+            } catch {
+                AppLog.cache.debug("CacheRepository.list skipped unreadable entry \(entry): \(error)")
+            }
         }
         return out
     }
 
     nonisolated public func get(_ id: String) throws -> ModelType {
-        guard exists(id) else {
-            throw CacheRepositoryError.notFound
-        }
-
-        let fileUrl = self.fileUrl(id)
-        guard let localCache = try? Data(contentsOf: fileUrl) else {
-            throw CacheRepositoryError.notFound
-        }
-
         // Synchronous version — only checks TTL, not network status.
-        return try decode(id: id, fileUrl: fileUrl, data: localCache, hasNetwork: true)
+        try load(id, hasNetwork: true)
     }
 
     /// Async version that checks network reachability.
     /// When offline, expired cache is still considered valid for offline support.
     nonisolated public func get(_ id: String, checkNetworkReachability: Bool) async throws -> ModelType {
-        guard exists(id) else {
-            throw CacheRepositoryError.notFound
-        }
-
-        let fileUrl = self.fileUrl(id)
-        guard let localCache = try? Data(contentsOf: fileUrl) else {
-            throw CacheRepositoryError.notFound
-        }
-
-        // Check network status for offline support
         let hasNetwork: Bool
         if checkNetworkReachability {
             let interfaceType = await NetworkReachabilityStore.shared.interfaceType
@@ -403,257 +394,68 @@ nonisolated public struct CacheRepository<T: Codable & Sendable>: CacheRepositor
         } else {
             hasNetwork = true
         }
-
-        return try decode(id: id, fileUrl: fileUrl, data: localCache, hasNetwork: hasNetwork)
+        return try load(id, hasNetwork: hasNetwork)
     }
 
     nonisolated public func save(_ id: String, data: ModelType) throws {
-        let fileUrl = self.fileUrl(id)
-
+        let backing = try backing()
+        let entry = engine.entry(for: id)
         do {
-            let toData: Data
-            switch envelope {
-            case .container:
-                let container = try CacheContainerModel(data: data, invalideTime: invalidateTime)
-                toData = try JSONEncoder().encode(container)
-            case .raw:
-                toData = try codec.makeEncoder().encode(data)
-            case .rawString:
-                guard let text = data as? String else {
-                    AppLog.cache.error("Cache save error: .rawString requires ModelType == String, got \(ModelType.self)")
-                    throw CacheRepositoryError.encodedError
-                }
-                toData = Data(text.utf8)
-            }
-            try commitWrite(toData, to: fileUrl)
+            try backing.write(try engine.encode(data), as: entry)
         } catch {
             AppLog.cache.error("Cache save error: \(error)")
             throw CacheRepositoryError.encodedError
         }
     }
 
-    // MARK: - Write dispatch (FileIOProfile)
-
-    /// Commits `data` to `fileURL` according to the repository's `ioProfile`.
-    nonisolated private func commitWrite(_ data: Data, to fileURL: URL) throws {
-        switch ioProfile {
-        case .plain:
-            try data.write(to: fileURL)
-        case .atomic:
-            try data.write(to: fileURL, options: .atomic)
-        case .durable:
-            try durableWrite(data, to: fileURL)
-        }
-    }
-
-    /// Cross-process durable write: flock + temp-file + sync + rename.
-    ///
-    /// A sibling lock file (`.<filename>.lock`) is the exclusive-lock target so
-    /// the lock stays valid across the rename of the data file; it is released
-    /// when the fd closes. Sync is `F_FULLFSYNC` on Darwin, where plain `fsync`
-    /// does not reach the media, and `fsync` elsewhere.
-    nonisolated private func durableWrite(_ data: Data, to fileURL: URL) throws {
-#if canImport(Darwin) || canImport(Glibc)
-        let fm = FileManager.default
-        let dir = fileURL.deletingLastPathComponent()
-        let lockPath = dir.appendingPathComponent(".\(fileURL.lastPathComponent).lock").path
-
-        let lockFd = open(lockPath, O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR)
-        guard lockFd >= 0 else {
-            AppLog.cache.error("Durable write: could not open lock \(lockPath) — errno \(errno)")
-            throw CacheRepositoryError.encodedError
-        }
-        defer { close(lockFd) }   // releases the flock automatically
-
-        // Blocks until no other process holds the lock.
-        while flock(lockFd, LOCK_EX) != 0 {
-            guard errno == EINTR else {
-                AppLog.cache.error("Durable write: could not acquire lock on \(lockPath) — errno \(errno)")
-                throw CacheRepositoryError.encodedError
-            }
-        }
-
-        // Write to a per-PID temp file alongside the target.
-        let pid = ProcessInfo.processInfo.processIdentifier
-        let tempURL = dir.appendingPathComponent(".\(fileURL.lastPathComponent).tmp\(pid)")
-        defer { try? fm.removeItem(at: tempURL) }
-
-        try data.write(to: tempURL)
-
-        // Flush to physical media (power-loss safety).
-        let tempFd = open(tempURL.path, O_RDONLY)
-        guard tempFd >= 0 else {
-            AppLog.cache.error("Durable write: could not reopen temp file — errno \(errno)")
-            throw CacheRepositoryError.encodedError
-        }
-        defer { close(tempFd) }
-#if canImport(Darwin)
-        // Not every filesystem supports F_FULLFSYNC; fsync is the best it offers.
-        let synced = fcntl(tempFd, F_FULLFSYNC) != -1 || fsync(tempFd) == 0
-#else
-        let synced = fsync(tempFd) == 0
-#endif
-        guard synced else {
-            AppLog.cache.error("Durable write: sync failed — errno \(errno)")
-            throw CacheRepositoryError.encodedError
-        }
-
-        // Atomic rename while holding the lock — POSIX rename(2) replaces the
-        // target in one operation.
-        guard rename(tempURL.path, fileURL.path) == 0 else {
-            AppLog.cache.error("Durable write: rename failed — errno \(errno)")
-            throw CacheRepositoryError.encodedError
-        }
-
-        // The rename lives in the directory entry, so sync that too. Best effort:
-        // some filesystems refuse fsync on a directory.
-        let dirFd = open(dir.path, O_RDONLY)
-        if dirFd >= 0 {
-            _ = fsync(dirFd)
-            close(dirFd)
-        }
-#else
-        // Not built or tested here (Windows, musl): NOT cross-process safe.
-        AppLog.cache.warning("Durable write: no flock on this platform — falling back to atomic write")
-        try data.write(to: fileURL, options: .atomic)
-#endif
-    }
-
     nonisolated public func delete(_ id: String) throws {
-        guard exists(id) else {
-            throw CacheRepositoryError.notFound
-        }
-
-        let fileUrl = self.fileUrl(id)
+        let backing = try backing()
+        let entry = engine.entry(for: id)
+        let removed: Bool
         do {
-            try FileManager.default.removeItem(at: fileUrl)
+            removed = try backing.remove(entry)
         } catch {
             AppLog.cache.warning("Cache delete failed: \(error)")
             throw CacheRepositoryError.deleteError
         }
+        guard removed else { throw CacheRepositoryError.notFound }
     }
 
-    // MARK: - Decoding (envelope-aware)
+    // MARK: - Private
 
-    /// Central decode path used by both sync and async `get`. Handles both
-    /// envelope modes and TTL invalidation uniformly.
-    nonisolated private func decode(id: String, fileUrl: URL, data localCache: Data, hasNetwork: Bool) throws -> ModelType {
-        switch envelope {
-        case .container:
-            do {
-                var container = try JSONDecoder().decode(CacheContainerModel<ModelType>.self, from: localCache)
-                if try cacheIsValid(&container, hasNetwork: hasNetwork) {
-                    let data = try container.decoded()
-                    AppLog.cache.debug("CacheRepository: get local data (.container)")
-                    return data
-                } else {
-                    try invalidateCache(id)
-                }
-                throw CacheRepositoryError.noCacheAvailable
-            } catch let error as CacheRepositoryError {
-                throw error
-            } catch {
-                AppLog.cache.error("Data in cache not decoded: \(error)")
-                throw CacheRepositoryError.decodedError
-            }
-
-        case .raw:
-            // .raw has no in-file timestamp — TTL is honored via file mtime.
-            if rawIsExpired(fileUrl: fileUrl), hasNetwork {
-                try invalidateCache(id)
-                throw CacheRepositoryError.noCacheAvailable
-            }
-            do {
-                let data = try codec.makeDecoder().decode(ModelType.self, from: localCache)
-                AppLog.cache.debug("CacheRepository: get local data (.raw)")
-                return data
-            } catch {
-                AppLog.cache.error("Data in cache not decoded (.raw): \(error)")
-                throw CacheRepositoryError.decodedError
-            }
-
-        case .rawString:
-            // Verbatim UTF-8 — same mtime-TTL rule as .raw.
-            if rawIsExpired(fileUrl: fileUrl), hasNetwork {
-                try invalidateCache(id)
-                throw CacheRepositoryError.noCacheAvailable
-            }
-            guard let text = String(data: localCache, encoding: .utf8),
-                  let model = text as? ModelType
-            else {
-                AppLog.cache.error("Data in cache not decoded (.rawString requires ModelType == String, got \(ModelType.self))")
-                throw CacheRepositoryError.decodedError
-            }
-            AppLog.cache.debug("CacheRepository: get local data (.rawString)")
-            return model
-        }
+    /// The backing, or the named reason there is none.
+    nonisolated private func backing() throws(CacheLocationError) -> any SynchronousCacheBacking {
+        try location.get()
     }
 
-    /// Checks if the cache is valid based on TTL and network reachability.
-    /// - Parameters:
-    ///   - container: The cached data container
-    ///   - hasNetwork: Whether network connectivity is available
-    /// - Returns: `true` if cache should be used, `false` if it should be invalidated
-    /// - Note: When offline (`hasNetwork` is `false`), expired cache is still considered valid
-    ///         to support offline mode functionality.
-    nonisolated private func cacheIsValid(_ container: inout CacheContainerModel<ModelType>, hasNetwork: Bool) throws -> Bool {
-        // Never invalidate cache if configured as such
-        if case .never = invalidateTime { return true }
-
-        // Check if Time To Live is OK
-        if case .inTime(let ttl) = invalidateTime {
-            let isExpired = container.timestamp + ttl <= Date().timeIntervalSince1970
-
-            // If cache is fresh, use it
-            if !isExpired {
-                return true
-            }
-
-            // Cache is expired - check network status for offline support
-            // If offline, use expired cache anyway (offline mode)
-            // If online, invalidate and let caller fetch fresh data
-            return !hasNetwork
-        }
-
-        return false
-    }
-
-    /// TTL check for `.raw` envelope — timestamp lives in the file's mtime,
-    /// not inside the payload (payload is the model itself).
-    nonisolated private func rawIsExpired(fileUrl: URL) -> Bool {
-        // `.never` never expires — regardless of file age.
-        if case .never = invalidateTime { return false }
-
-        if case .inTime(let ttl) = invalidateTime {
-            let attrs = try? FileManager.default.attributesOfItem(atPath: fileUrl.path)
-            guard let mtime = attrs?[.modificationDate] as? Date else {
-                // Can't read mtime → treat as fresh, don't destroy readable data.
-                return false
-            }
-            return mtime.timeIntervalSince1970 + ttl <= Date().timeIntervalSince1970
-        }
-
-        return false
-    }
-
-    nonisolated private func invalidateCache(_ id: String) throws {
+    nonisolated private func load(_ id: String, hasNetwork: Bool) throws -> ModelType {
+        let backing = try backing()
+        let entry = engine.entry(for: id)
+        let blob: CacheBlob?
         do {
-            try delete(id)
+            blob = try backing.read(entry)
+        } catch {
+            AppLog.cache.error("Cache read failed for \(entry): \(error)")
+            throw CacheRepositoryError.notFound
+        }
+        guard let blob else { throw CacheRepositoryError.notFound }
+
+        switch try engine.decode(blob, hasNetwork: hasNetwork) {
+        case .value(let model):
+            return model
+        case .expired:
+            try invalidate(entry, in: backing)
+            throw CacheRepositoryError.noCacheAvailable
+        }
+    }
+
+    nonisolated private func invalidate(_ entry: String, in backing: any SynchronousCacheBacking) throws {
+        do {
+            // An entry that is already gone satisfies the invalidation.
+            _ = try backing.remove(entry)
         } catch {
             AppLog.cache.error("Cache invalidation error: \(error)")
             throw CacheRepositoryError.invalidateCache
         }
-    }
-
-    nonisolated private func fileUrl(_ id: String) -> URL {
-        let filename: String = switch naming {
-        case .legacy:
-            name + "-" + id + ".cache"
-        case .bareId(let ext):
-            ext.map { "\(id).\($0)" } ?? id
-        case .custom(let derive):
-            derive(name, id)
-        }
-        return baseDirectory.appendingPathComponent(filename)
     }
 }

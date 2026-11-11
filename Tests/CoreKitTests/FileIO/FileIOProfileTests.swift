@@ -1,3 +1,4 @@
+import CoreKitTestSupport
 import XCTest
 @testable import CoreKit
 
@@ -22,8 +23,8 @@ final class FileIOProfileTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeTempDir(_ label: String = "fio") -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("FileIOProfileTests-\(label)-\(UUID().uuidString)", isDirectory: true)
+        let dir = TestScratch.forPackage().scratchRoot(scope: "cache-tests")
+            .appending(path: "FileIOProfileTests-\(label)-\(UUID().uuidString)", directoryHint: .isDirectory)
         return dir
     }
 
@@ -70,8 +71,10 @@ final class FileIOProfileTests: XCTestCase {
     // MARK: - .atomic
 
     func testAtomicProfileIsDefaultAndBackwardCompat() throws {
-        // The 1-arg init must default to .atomic (=today's behavior).
-        let repo = CacheRepository<TestModel>("AtomicDefault")
+        // The profile must default to .atomic (=today's behavior).
+        let dir = makeTempDir("atomic-default")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repo = CacheRepository<TestModel>("AtomicDefault", baseDirectory: dir)
         XCTAssertEqual(repo.ioProfile, .atomic)
     }
 
@@ -110,7 +113,7 @@ final class FileIOProfileTests: XCTestCase {
 
         try repo.save(id, data: model)
 
-        let fileURL = dir.appendingPathComponent("DurableJSON-\(id).cache")
+        let fileURL = dir.appending(path: "DurableJSON-\(id).cache", directoryHint: .notDirectory)
         let raw = try Data(contentsOf: fileURL)
         let json = try JSONSerialization.jsonObject(with: raw) as? [String: Any]
         XCTAssertNotNil(json, "durable-written file must be parseable JSON")
@@ -130,7 +133,7 @@ final class FileIOProfileTests: XCTestCase {
         try repo.save(id, data: TestModel(id: 6, name: "lock"))
 
         let cacheFilename = "DurableLock-\(id).cache"
-        let lockURL = dir.appendingPathComponent(".\(cacheFilename).lock")
+        let lockURL = dir.appending(path: ".\(cacheFilename).lock", directoryHint: .notDirectory)
         XCTAssertTrue(
             FileManager.default.fileExists(atPath: lockURL.path),
             "durable save must leave the sibling lock file in place for future lock acquisition"
@@ -209,7 +212,9 @@ final class FileIOProfileTests: XCTestCase {
     }
 
     func testRepositoryExposesIoProfile() {
-        let repo = CacheRepository<TestModel>("ProfileExposed", ioProfile: .durable)
+        let dir = makeTempDir("profile-exposed")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let repo = CacheRepository<TestModel>("ProfileExposed", baseDirectory: dir, ioProfile: .durable)
         XCTAssertEqual(repo.ioProfile, .durable)
     }
 }

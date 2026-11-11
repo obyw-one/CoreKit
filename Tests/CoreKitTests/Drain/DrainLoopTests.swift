@@ -182,7 +182,7 @@ struct DrainLoopTests {
 
         await loop.run()
 
-        #expect(clock.sleeps == [1, 2, 4, 6, 6])
+        #expect(await clock.sleeps == [1, 2, 4, 6, 6])
     }
 
     @Test("work resets the backoff to tickInterval")
@@ -195,7 +195,7 @@ struct DrainLoopTests {
         await loop.run()
 
         // idle(1), idle(2), work → tickInterval(9), idle → base(1)
-        #expect(clock.sleeps == [1, 2, 9, 1])
+        #expect(await clock.sleeps == [1, 2, 9, 1])
     }
 
     @Test("every tick emits a summary — a mute loop is impossible")
@@ -238,7 +238,7 @@ struct DrainLoopTests {
                 clock: clock
             )
             await loop.run()
-            return clock.sleeps
+            return await clock.sleeps
         }
         let a = await trace()
         let b = await trace()

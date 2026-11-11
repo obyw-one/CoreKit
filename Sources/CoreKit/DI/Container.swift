@@ -120,10 +120,21 @@ class Registration<T>: RegistrationProtocol {
             lock.unlock()
             if let existingWeak { return existingWeak }
             let candidate = try factory(resolver)
+            // A weak reference needs a reference type. `type(of: candidate as Any)` returns the
+            // runtime dynamic type — erasing through `Any` is what makes it see `ValueGreeter.Type`
+            // even when T is `any Greeter`. We check the metatype ONCE; if that passes we know
+            // the value is a class and an unconditional `as AnyObject` is safe.
+            let dynamicType = type(of: candidate as Any)
+            guard dynamicType is AnyObject.Type else {
+                throw ContainerError.invalidRegistration(
+                    "'\(T.self)' is registered with the weak scope but the factory returned a value type "
+                        + "(\(dynamicType)); the weak scope holds class instances only — use .transient or .cached")
+            }
+            let object = candidate as AnyObject
             lock.lock()
             defer { lock.unlock() }
             if let raced = weakInstance as? T { return raced }
-            weakInstance = candidate as AnyObject
+            weakInstance = object
             return candidate
         }
     }
@@ -154,10 +165,11 @@ class Registration<T>: RegistrationProtocol {
 /// `@TaskLocal` binds to the task, not the thread: it inherits into child
 /// tasks structurally, is invisible to siblings, and unwinds with the scope
 /// — which is the shape circular-dependency detection actually needs.
-enum ResolutionStack {
+struct ResolutionStack {
     /// Keyed by context so sibling containers never share a stack, even
     /// when they carry the same `name`.
     @TaskLocal static var stacks: [String: [String]] = [:]
+    private init() {}
 }
 
 final class ResolutionContext: Sendable {
@@ -186,6 +198,22 @@ final class ResolutionContext: Sendable {
 // MARK: - Container
 
 /// Dependency Injection Container with Swinject-style API
+///
+/// **Concurrency — a documented exception, not an oversight.** This class is
+/// `@unchecked Sendable`: its registrations, cached instances and the static
+/// default are shared mutable state guarded by `NSLock`s. It stays that way on
+/// purpose, because every honest alternative breaks the API that ~140 call
+/// sites across the fleet spell:
+///
+/// - an `actor` makes `resolve` `async` (and `@Resolve` impossible, as a
+///   property wrapper cannot suspend);
+/// - an immutable value type cannot hold a `.cached` instance;
+/// - `Synchronization.Mutex` needs macOS 15 / iOS 18, above CoreKit's floors.
+///
+/// The factory never runs under a lock (see `Registration`), so the lock
+/// protects only dictionary and cache bookkeeping. The redesign options and
+/// their migration cost are written up in the pull request that introduced this
+/// note (obyw-one/CoreKit#32); do not "fix" this class piecemeal.
 open class Container: Resolver, @unchecked Sendable {
     // MARK: - Static Properties
 
@@ -296,6 +324,9 @@ open class Container: Resolver, @unchecked Sendable {
         scope: RegistrationScope,
         factory: @escaping (Resolver) throws -> T
     ) throws -> Container {
+        // The weak scope's class-only rule is enforced where the instance exists, at resolve: in a generic
+        // context Swift cannot tell a concrete struct from a protocol type at registration (measured:
+        // `_canBeClass`, `is AnyClass` and the metatype cast answer the same for both).
         let key = registrationKey(for: type, name: name)
 
         lock.lock()

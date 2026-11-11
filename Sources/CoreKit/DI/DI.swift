@@ -140,7 +140,9 @@ public enum DI {
     // MARK: - Configure once, require (0.10.1)
 
     /// Whether `configure(for:assemblies:)` has run since the last `reset()`.
-    /// Guarded by `stateLock`; `configureIfNeeded` serialises the first
+    /// A documented exception, with ``Container``: a synchronous, process-wide
+    /// "configured once" flag cannot be an actor without making `DI.require`
+    /// and `@Resolve` asynchronous. Guarded by `stateLock`; `configureIfNeeded` serialises the first
     /// configuration under `onceLock` so two tasks racing on first use never
     /// build two containers.
     nonisolated(unsafe) private static var configured = false

@@ -10,7 +10,7 @@ struct TestScratchTests {
     func forPackageRoot() {
         let scratch = TestScratch.forPackage()
         let expected = TestPackagePaths.packageRoot()
-            .appendingPathComponent(TestScratch.testsDirectoryName, isDirectory: true)
+            .appending(path: TestScratch.testsDirectoryName, directoryHint: .isDirectory)
             .standardizedFileURL
         #expect(scratch.testsRoot == expected)
         #expect(scratch.runID == TestScratch.processRunID)
@@ -22,8 +22,8 @@ struct TestScratchTests {
         let a = try scratch.makeScratchDir(scope: "test-scratch-tests")
         let b = try scratch.makeScratchDir(scope: "test-scratch-tests")
         defer {
-            try? scratch.removeScratchDir(a)
-            try? scratch.removeScratchDir(b)
+            scratch.sweep(a)
+            scratch.sweep(b)
         }
         #expect(a != b)
         #expect(FileManager.default.fileExists(atPath: a.path))
@@ -34,7 +34,7 @@ struct TestScratchTests {
 
     @Test("two runIDs never share a scratch root for the same scope")
     func runIDsIsolate() {
-        let root = TestPackagePaths.packageRoot().appendingPathComponent(".tests", isDirectory: true)
+        let root = TestPackagePaths.packageRoot().appending(path: ".tests", directoryHint: .isDirectory)
         let one = TestScratch(testsRoot: root, runID: "run-a")
         let two = TestScratch(testsRoot: root, runID: "run-b")
         #expect(one.scratchRoot(scope: "x") != two.scratchRoot(scope: "x"))
@@ -60,5 +60,22 @@ struct TestScratchTests {
             }
             #expect(!scratch.isInsideSandbox(url))
         }
+    }
+
+    @Test("sweep reports a refused cleanup instead of swallowing it, and stays silent on a clean one")
+    func sweepReportsFailures() throws {
+        let scratch = TestScratch.forPackage()
+        let mine = try scratch.makeScratchDir(scope: "test-scratch-tests")
+        var clean: [String] = []
+        scratch.sweep(mine) { clean.append($0) }
+        #expect(clean.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: mine.path))
+
+        let outside = TestPackagePaths.packageRoot()
+        var refused: [String] = []
+        scratch.sweep(outside) { refused.append($0) }
+        #expect(refused.count == 1)
+        #expect(refused.first?.contains(outside.path) == true)
+        #expect(FileManager.default.fileExists(atPath: outside.path))
     }
 }

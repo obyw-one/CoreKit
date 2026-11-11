@@ -20,6 +20,9 @@ let package = Package(
         //
         // Apple TV 4K 3rd gen ships tvOS 26+, so 18.0 costs no reachability.
         .tvOS(.v18),
+        // visionOS: what works on iOS works on visionOS. 1.0 is the visionOS release that matches
+        // iOS 17, the iOS floor above.
+        .visionOS(.v1),
     ],
     products: [
         .library(
@@ -67,11 +70,17 @@ let package = Package(
             dependencies: ["CoreKit"]
         ),
         .target(
-            name: "CoreKitTestSupport"
+            name: "CoreKitTestSupport",
+            dependencies: ["CoreKit"]
         ),
         .testTarget(
             name: "CoreKitTests",
-            dependencies: ["CoreKit", "CoreKitTestSupport"]
+            dependencies: ["CoreKit", "CoreKitTestSupport"],
+            // Paths/Fixtures stays excluded: the counted-depth ratchet baseline there is read by path on purpose.
+            exclude: ["Paths/Fixtures"],
+            // Wire fixtures are declared resources: a moved or renamed file is a build error, and
+            // `FixtureFile` reads them through `Bundle.module`, not a path into the checkout.
+            resources: [.process("Fixtures")]
         ),
         .testTarget(
             name: "CoreKitUITests",

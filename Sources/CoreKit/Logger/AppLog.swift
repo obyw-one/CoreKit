@@ -36,6 +36,13 @@ public enum AppLog: Sendable {
     /// The subsystem identifier used by all loggers.
     /// Must be set by the host app at launch (e.g., in `App.init()`).
     /// Defaults to the main bundle identifier if available, otherwise "CoreKit".
+    ///
+    /// A documented exception to "no `nonisolated(unsafe)`": this is
+    /// write-once launch configuration read by synchronous logging calls
+    /// (`AppLog.cache.error(...)` has to be callable from anywhere, so the value
+    /// cannot sit behind an actor), and every alternative is a lock, a floor
+    /// (`Mutex`, `Atomic`) or a breaking API. Set it before any task starts,
+    /// exactly once; a later change is racy by definition.
     nonisolated(unsafe) public static var subsystem: String = Bundle.main.bundleIdentifier ?? "CoreKit"
 
     // MARK: - Factory

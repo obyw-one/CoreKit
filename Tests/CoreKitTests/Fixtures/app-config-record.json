@@ -1,0 +1,15 @@
+{
+  "id": "rec123",
+  "collectionId": "c1",
+  "collectionName": "app_configs",
+  "created": "2026-11-01 10:00:00.000Z",
+  "app_id": "demo",
+  "env": "prod",
+  "min_version": "1.2.0",
+  "latest_version": "1.4.1",
+  "kill_switch": false,
+  "maintenance_mode": true,
+  "maintenance_message": "Back soon",
+  "feature_flags": {"feature_x": true, "max_items": 5},
+  "config_data": {"tagline": "hello"}
+}

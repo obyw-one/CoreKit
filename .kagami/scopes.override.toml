@@ -5,10 +5,10 @@
 name = "CoreKitCache"
 language = "swift"
 package_path = "."
-type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests"]
+type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests", "InMemoryRepositoryTests", "OrderedQueueTests", "ReconcilerTests", "AssemblyResolutionTests", "ContainerWeakScopeTests"]
 test_file_patterns = ["**/CoreKitTests/*.swift"]
 timeout = 300
-expected_test_min = 93
+expected_test_min = 133
 description = "CoreKit cache + container + resolve suites. Run: kagami test --scope CoreKitCache"
 
 [[scopes]]
@@ -27,7 +27,7 @@ description = "Draining + DrainLoop: tick/backoff via FakeDrainClock, quarantine
 name = "CoreKitHash"
 test_target_name = "CoreKitTests"
 type_patterns = ["ContentHashTests"]
-test_file_patterns = ["**/CoreKitTests/Utilities/ContentHashTests.swift"]
+test_file_patterns = ["**/CoreKitTests/Utilities/**.swift"]
 expected_test_min = 6
 timeout = 600
 description = "ContentHash: SHA-256 vectors, format contract, streaming parity. Run: kagami test --scope CoreKitHash"
@@ -54,7 +54,7 @@ name = "CoreKitFileIO"
 test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["FileIOProfileTests"]
-test_file_patterns = ["**/CoreKitTests/FileIOProfileTests.swift"]
+test_file_patterns = ["**/CoreKitTests/FileIO/**.swift"]
 expected_test_min = 10
 timeout = 300
 description = "FileIOProfile: per-profile write/read round-trips, durable lock-file lifecycle, concurrent-write integrity. Run: kagami test --scope CoreKitFileIO"
@@ -80,3 +80,115 @@ test_file_patterns = ["**/CoreKitUITests/**.swift"]
 expected_test_min = 1
 timeout_seconds = 300
 description = "CoreKitUI bridge: NetworkStatus.InterfaceType aliases the core type. Run: kagami test --scope CoreKitUI"
+
+[[scopes]]
+# Resource layer, wave 1 (spec d3f8a1b2): VirtualPathOwning + the registry +
+# PathResolving over an injected root, containment, the agnostic representation
+# and the object-store address (bucket/key with a node id).
+name = "CoreKitVirtualPaths"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["PathSegmentTests", "VirtualPathTests", "PathResolvingTests", "ResourceAddressTests", "OwnedResourceStoreTests", "VirtualDocumentOwningTests", "VirtualNodeTreeTests"]
+test_file_patterns = ["**/CoreKitTests/VirtualPaths/**.swift"]
+expected_test_min = 88
+timeout_seconds = 300
+description = "Virtual paths: validated segments, agnostic representation, prod/test over one root, containment, object-store address. Run: kagami test --scope CoreKitVirtualPaths"
+
+[[scopes]]
+# Resource layer, wave 3 (spec d3f8a1b2, BR-RP-12/13): the typed env vocabulary
+# graduated from plugin-api (EnvKeyProviding, the no-fallback reader, layering)
+# and the generic feature-flag layer (local defaults per distribution, remote
+# merge, the resolver DI slot).
+name = "CoreKitEnvFlags"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["EnvKeyProvidingTests", "FeatureFlagsTests", "TypedEnvironmentTests"]
+test_file_patterns = ["**/CoreKitTests/Environment/**.swift", "**/CoreKitTests/Flags/**.swift"]
+expected_test_min = 37
+timeout_seconds = 300
+description = "Env keys and feature flags: typed env vocabulary, no-fallback reader, flag defaults + remote merge, resolver slot. Run: kagami test --scope CoreKitEnvFlags"
+
+[[scopes]]
+# Resource layer, wave 4 (spec d3f8a1b2, BR-RP-07/11, T-06/T-11): the cache
+# contract over swappable backings. ONE behaviour suite and ONE backing contract
+# run over every backing CoreKit ships (local folder, in memory, object store,
+# the S3 client over an emulated store), through the synchronous and the
+# asynchronous facade; BackendKit and NetKit run the same suites over theirs.
+name = "CoreKitCacheBackings"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CacheBackingConformanceTests", "AWSSignatureV4Tests", "S3ObjectStoreClientTests", "ObjectStoreCacheBackingTests", "LocalFolderCacheBackingTests", "CacheRepositoryBackingTests", "CacheDefaultLocationTests", "CacheDefaultLocationDITests"]
+test_file_patterns = ["**/CoreKitTests/CacheBackings/**.swift"]
+expected_test_min = 68
+timeout_seconds = 600
+description = "Cache backings: behaviour + contract suites over every backing, SigV4 known-answer, S3 client, node-id addressing. Run: kagami test --scope CoreKitCacheBackings"
+
+[[scopes]]
+# Resource layer, wave 5 (spec d3f8a1b2, BR-RP-13): the backing-agnostic config
+# layer — AppConfig, the ConfigEndpoint contract, the service that fetches once
+# and caches through the cache contract, flags merged from it. The endpoint
+# suite is the one NetKit (PocketBase) and BackendKit (SQL) run over theirs.
+name = "CoreKitConfig"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["AppConfigTests", "AppConfigServiceTests", "ConfigEndpointBackingTests"]
+test_file_patterns = ["**/CoreKitTests/Config/**.swift"]
+expected_test_min = 29
+timeout_seconds = 300
+description = "App config: wire shape, service (fetch, cache, fallback), endpoint contract over each backing. Run: kagami test --scope CoreKitConfig"
+
+[[scopes]]
+# JSON helpers and JSONValue(untyped:) — a number is classified by what it is
+# (round 3 of the resource-layer epic: 0 and 1 were read as booleans).
+name = "CoreKitJSON"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["JSONHelpersTests", "JSONValueUntypedTests"]
+test_file_patterns = ["**/CoreKitTests/JSON/**.swift"]
+expected_test_min = 14
+timeout_seconds = 300
+description = "JSON helpers and JSONValue(untyped:): bool/int/double discrimination through JSONSerialization, native and bridged. Run: kagami test --scope CoreKitJSON"
+
+[[scopes]]
+# The code blocks of docs/*.md, compiled and run: a doc whose API moved stops building.
+name = "CoreKitDocs"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["DocsExamplesTests"]
+test_file_patterns = ["**/CoreKitTests/Docs/**.swift"]
+expected_test_min = 6
+timeout_seconds = 300
+description = "docs/*.md examples compile and behave as written. Run: kagami test --scope CoreKitDocs"
+
+[[scopes]]
+# The Swift 6 runtime-abort ratchet and the TaskDeadline primitive. They sat in no scope's glob, so the gate never ran them.
+name = "CoreKitConcurrency"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CoreKitSleepRatchetTests", "TaskDeadlineTests"]
+test_file_patterns = ["**/CoreKitTests/Concurrency/**.swift"]
+expected_test_min = 7
+timeout_seconds = 300
+description = "TaskDeadline and the no-Task.sleep ratchet. Run: kagami test --scope CoreKitConcurrency"
+
+[[scopes]]
+# The test-support path helpers and the counted-depth #filePath ratchet, plus the target's fixture loader.
+name = "CoreKitPaths"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["CountedDepthWalkRatchetTests", "TestPackagePathsTests", "TestSandboxTests", "TestScratchTests"]
+test_file_patterns = ["**/CoreKitTests/Paths/**.swift", "**/CoreKitTests/Support/**.swift"]
+expected_test_min = 20
+timeout_seconds = 300
+description = "TestScratch / TestSandbox / TestPackagePaths and the #filePath-walk ratchet. Run: kagami test --scope CoreKitPaths"
+
+[[scopes]]
+# The ratchet that keeps this registry honest: every test file belongs to exactly one scope.
+name = "CoreKitGate"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["ScopeCoverageRatchetTests"]
+test_file_patterns = ["**/CoreKitTests/Gate/**.swift"]
+expected_test_min = 6
+timeout_seconds = 300
+description = "Every test file under Tests/ is run by exactly one declared scope. Run: kagami test --scope CoreKitGate"

@@ -8,12 +8,12 @@ import Foundation
 /// single `T-CP-07_realProbeIsSane` invariant, and even that uses no
 /// fixture values.
 ///
-/// Held as a reference type with a lock so a single test can walk a
-/// prober through multiple pressure states (idle → loaded → thrashing)
-/// without re-wiring the consumer. This is what `T-CP-03` uses to
-/// demonstrate that `availableNow` moves while `totalRAM` does not.
-public final class MockCapacityProber: DeviceCapacityProbing, @unchecked Sendable {
-    private let lock = NSLock()
+/// An actor, so a single test can walk a prober through multiple pressure
+/// states (idle → loaded → thrashing) without re-wiring the consumer — this
+/// is what `T-CP-03` uses to demonstrate that `availableNow` moves while
+/// `totalRAM` does not — and the compiler, not a lock, proves the shared
+/// state is safe.
+public actor MockCapacityProber: DeviceCapacityProbing {
     private var _snapshot: DeviceCapacitySnapshot
     private var _probeCount: Int = 0
 
@@ -23,11 +23,9 @@ public final class MockCapacityProber: DeviceCapacityProbing, @unchecked Sendabl
 
     // MARK: - DeviceCapacityProbing
 
-    public func probe() -> DeviceCapacitySnapshot {
-        lock.withLock {
-            _probeCount += 1
-            return _snapshot
-        }
+    public func probe() async -> DeviceCapacitySnapshot {
+        _probeCount += 1
+        return _snapshot
     }
 
     // MARK: - Test controls
@@ -35,12 +33,12 @@ public final class MockCapacityProber: DeviceCapacityProbing, @unchecked Sendabl
     /// Replace the snapshot the next `probe()` will return. Tests use
     /// this to model a device that got busier between reads.
     public func setSnapshot(_ snapshot: DeviceCapacitySnapshot) {
-        lock.withLock { _snapshot = snapshot }
+        _snapshot = snapshot
     }
 
     /// Total `probe()` calls served so far — for assertions that a
     /// consumer read the seam exactly once (or exactly N times).
     public var probeCount: Int {
-        lock.withLock { _probeCount }
+        _probeCount
     }
 }
