@@ -7,10 +7,17 @@ Foundation: DI, Coordinator, AppLog, Extensions.
 Add to your `Package.swift`:
 
 ```swift
-.package(path: "../../packages/CoreKit")
+.package(url: "https://github.com/obyw-one/CoreKit.git", from: "0.15.0"),
 ```
 
-No external dependencies.
+| Product | What it is | Platforms |
+|---|---|---|
+| `CoreKit` | DI, logging, JSON, cache over swappable backings, the path layer, env keys and flags, config | Apple + Linux |
+| `CoreKitUI` | SwiftUI components, the coordinator, view extensions, network status | Apple |
+| `CoreKitSecurity` | Keychain and auth persistence (replaces the archived SecurityKit) | Apple |
+| `CoreKitTestSupport` | Test scratch roots, package paths, the backing conformance suites | Apple + Linux |
+
+Dependencies: [swift-crypto](https://github.com/apple/swift-crypto) and [swift-log](https://github.com/apple/swift-log).
 
 ## Documentation
 
