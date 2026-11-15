@@ -113,10 +113,18 @@ public struct PlatformCapacityProber: DeviceCapacityProbing {
             guard sysctlbyname("machdep.cpu.brand_string", &buffer, &size, nil, 0) == 0 else {
                 return nil
             }
-            // Drop the C null terminator before decoding — Swift 6's
-            // `String(decoding:as:)` treats the null byte as content.
+            // Drop the C null terminator before decoding — a null byte is
+            // content to every Swift decoder, not a terminator.
+            //
+            // `String(bytes:encoding:)` rather than `String(decoding:as:)`: the
+            // failable initialiser is the fleet rule
+            // (`optional_data_string_conversion`), and it is also the honest
+            // one here — `sysctlbyname` returns bytes the kernel chose, and a
+            // non-UTF-8 chip string should read as "unmeasured" (BR-CP-06)
+            // rather than as U+FFFD replacement characters in a field a caller
+            // compares against known values.
             let payload = buffer.prefix { $0 != 0 }
-            return String(decoding: payload, as: UTF8.self)
+            return String(bytes: payload, encoding: .utf8)
         }
     #endif // os(macOS)
 

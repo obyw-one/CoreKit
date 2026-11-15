@@ -39,11 +39,12 @@ description = "ContentHash: SHA-256 vectors, format contract, streaming parity. 
 # capacity syscalls stay confined to PlatformCapacityProber.swift.
 name = "CoreKitCapacity"
 test_target_name = "CoreKitTests"
-type_patterns = ["DeviceCapacitySnapshotTests", "PlatformCapacityProberTests"]
+type_patterns = ["DeviceCapacitySnapshotTests", "PlatformCapacityProberTests", "ProcMeminfoCapacityProberTests"]
 test_file_patterns = ["**/CoreKitTests/Capacity/**.swift"]
 # 7 tests: T-CP-01/02/03/05/06 in the snapshot suite,
-# T-CP-04/07 in the platform-prober suite.
-expected_test_min = 7
+# T-CP-04/07 in the platform-prober suite. +8 for the /proc/meminfo prober
+# (spec c8fa126c): the Linux arm of the same seam, fixture-fed so it runs here.
+expected_test_min = 15
 timeout = 300
 description = "DeviceCapacity: snapshot round-trip, seam ratchet, platform basis, live macOS invariants. Run: kagami test --scope CoreKitCapacity"
 
@@ -67,9 +68,13 @@ test_target_name = "CoreKitTests"
 package_path = "."
 type_patterns = ["CorePortabilityRatchetTests"]
 test_file_patterns = ["**/CoreKitTests/Portability/**.swift"]
-expected_test_min = 2
+# 2 -> 5 with spec c8fa126c: T-L-04 now bans a GUARDED Apple import too, T-L-03
+# bans an Apple-capability condition outside Sources/CoreKit/Platform/, and the
+# classifier's allow-list is itself a test so the allowance is a measured
+# contract ([[a-source-text-ratchet-must-measure-the-thing-it-names]]).
+expected_test_min = 5
 timeout_seconds = 300
-description = "Core portability: no unguarded Apple-only import in Sources/CoreKit, platform-neutral reachability store. Run: kagami test --scope CoreKitPortability"
+description = "Core portability: no Apple-only import and no platform condition in Sources/CoreKit outside Platform/ (T-L-03, T-L-04). Run: kagami test --scope CoreKitPortability"
 
 [[scopes]]
 name = "CoreKitUI"
@@ -222,3 +227,31 @@ test_file_patterns = ["**/CoreKitTests/EventBus/**.swift"]
 expected_test_min = 16
 timeout_seconds = 300
 description = "EventBusProviding: all four DispatchModes, waterfall ordering, disposer reversibility, and the DI slot. Run: kagami test --scope CoreKitEventBus"
+[[scopes]]
+# Spec c8fa126c W1 — logging is a capability: one `LoggingProviding` protocol in
+# the portable target, `OSLogLogger` on Apple and `SwiftLogLogger` elsewhere,
+# chosen by `CoreKitPlatformAssembly` and by nothing else. T-L-05/06/07 are the
+# registration tests; the vocabulary tests pin the 13 os_log category strings
+# `AppLog` shipped, which are part of the contract (BR-L-05).
+name = "CoreKitLogging"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["LoggingCapabilityTests", "CoreKitPlatformAssemblyTests", "AppLogSeedTests"]
+test_file_patterns = ["**/CoreKitTests/Logging/**.swift", "**/CoreKitTests/Platform/**.swift"]
+expected_test_min = 14
+timeout_seconds = 300
+description = "LoggingProviding + CoreKitPlatformAssembly: per-target registration, T-L-05..07, the AppLog facade. Run: kagami test --scope CoreKitLogging"
+
+[[scopes]]
+# Spec c8fa126c W3 — reachability is a capability: `ReachabilityProviding` over
+# an AsyncStream, `NWPathReachability` on Apple and `GetifaddrsReachability`
+# elsewhere. T-L-08: a fake provider drives the consumer and no test binds a
+# real interface. The POSIX classifier is pure, so it is gated on this machine.
+name = "CoreKitReachability"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["ReachabilityCapabilityTests"]
+test_file_patterns = ["**/CoreKitTests/Reachability/**.swift"]
+expected_test_min = 8
+timeout_seconds = 300
+description = "ReachabilityProviding: fanout replay/multicast/finish, getifaddrs classification, T-L-08. Run: kagami test --scope CoreKitReachability"
