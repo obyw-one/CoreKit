@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.17.0 (2026-11-15): the fleet's in-process event bus moves into CoreKit
+
+### Added: `EventBusProviding` and its providers
+The fleet's in-process reactive seam — the primitive that replaces Combine, with NATS as the distributed bus and never one routed through the other — lived in `ShikkiPluginAPI`, one layer **above** CoreKit. No CoreKit consumer could reach it without inverting the dependency direction. Operator ruling 2026-11-15: move it down, keep the name.
+
+New in `CoreKit` (portable; Foundation only, no platform condition — this slot needs none):
+- `EventBusProviding`, `DispatchMode`, `DisposerToken`, `EventBusError`
+- `InMemoryEventBusProvider` — the real single-process bus, an `actor`
+- `NoOpEventBusProvider` — drops every event, for `.mock`
+- `CoreKitEventBusAssembly` — registers in-memory for `.production`, no-op for `.mock`, `.cached` so one process gets one bus. Two instances would not see each other's subscribers, which is a silent delivery failure rather than an error.
+
+Reached through DI, never a singleton:
+```swift
+let container = DI.configure(for: .production, assemblies: [CoreKitEventBusAssembly()])
+let bus = container.require((any EventBusProviding).self)
+```
+A consumer that resolves the slot without registering the assembly gets `ContainerError.notRegistered` — a named failure at the composition root.
+
+### Breaking for ShikkiPluginAPI consumers only: `subscribe` and `intercept` are `async`
+Measured fleet-wide before the move (`grep -rl` over every workspace, excluding `.build/` and checkouts): **6 hits, all inside shikki-plugin-api itself. Zero external consumers** — not in CoreKit, NetKit, AIKit, shikki, ShikkiMCP, shikki-client or any plugin. That zero is what makes this change free, and it is the point of the port rather than a side effect of it.
+
+`InMemoryEventBusProvider` was the kit's one production `final class … @unchecked Sendable` + `NSLock`. The lock was not a choice: both requirements were synchronous, and an actor cannot be reached without an `await`. `Synchronization.Mutex` is not available at CoreKit's `.macOS(.v14)` floor. Making the requirements `async` turned the provider into a plain `actor` and deleted every line of synchronisation — no lock, no `@unchecked Sendable`, no hand-written snapshot to avoid a torn read.
+
+It also fixed a real defect. **Awaiting `subscribe()` now guarantees the subscriber is registered when it returns**, so a publish issued after it cannot be missed; the same `await` on `intercept()` is what makes "interceptors wrap in registration order" a guarantee instead of a race between two deferred registrations.
+
+Callers add `await`. `shikki-plugin-api` deletes its copies and depends on CoreKit `from: "0.17.0"` (obyw-one/shikki-plugin-api#38).
+
+### Also
+- `NOTICE` names **OBYW.one SASU** as the copyright holder and Jeoffrey Thirot as the author. The licence is unchanged (Apache-2.0 since 0.14.0).
+- `InMemoryEventBusProvider` exposes `subscriberCount(topic:)` / `interceptorCount(topic:)`, so BR-DI-11 reversibility is measured rather than asserted in a comment.
+
 ## 0.16.0 (2026-11-11): CoreKit ships no S3 transport
 
 ### Removed: `URLSessionS3Transport` moves to NetKit
