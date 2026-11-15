@@ -106,6 +106,35 @@ struct ReachabilityCapabilityTests {
         #expect(GetifaddrsReachability.classify(interfaceName: "docker0") == .unknown)
     }
 
+    /// The REAL provider, end to end, through the protocol only.
+    ///
+    /// `ScriptedReachability` above duplicates `updates()`'s bridging, so until
+    /// this test existed the bridging in the shipped providers — the
+    /// `AsyncStream` that forwards from the actor's own stream and cancels its
+    /// pump on termination — was covered by nothing
+    /// ([[a-capability-that-exists-but-is-never-called-passes-every-unit-test-and-ships-nothing]]).
+    /// `GetifaddrsReachability` is constructible on every POSIX target, macOS
+    /// included, so the gate on this machine sees it.
+    @Test("the shipped POSIX provider starts, answers, streams and cancels")
+    func theRealProviderWorksEndToEnd() async throws {
+        let sut = GetifaddrsReachability(pollInterval: .milliseconds(50))
+        let stream = sut.updates()
+        var iterator = stream.makeAsyncIterator()
+
+        await sut.start()
+
+        // The first reading is taken before the first sleep, by contract, so a
+        // caller that starts and reads immediately is not told "not observed
+        // yet" about a host whose interfaces are right there. Awaiting the
+        // stream is the bounded wait — no sleep, no guessed interval.
+        let first = await iterator.next()
+        #expect(first != nil, "start() must publish a reading without a caller polling for it")
+        #expect(await sut.current == first, "current and the stream must agree")
+
+        await sut.cancel()
+        #expect(await iterator.next() == nil, "cancel() must finish every live stream")
+    }
+
     /// The real probe runs here too — on macOS, through the same `getifaddrs`
     /// that musl has — because a provider only Linux can execute is a provider
     /// no gate on this machine can see. It asserts a SHAPE, not a value: a
