@@ -205,3 +205,20 @@ test_file_patterns = ["**/CoreKitSecurityTests/**.swift"]
 expected_test_min = 14
 timeout_seconds = 300
 description = "Keychain manager + auth persistence, absorbed from SecurityKit. Run: kagami test --scope CoreKitSecurity"
+
+[[scopes]]
+# EventBusProviding — the fleet's in-process reactive seam and its Combine
+# replacement, moved down from ShikkiPluginAPI on 2026-11-15 by operator
+# ruling. The load-bearing contracts are BR-DI-11 (every registration returns
+# a means of teardown, disposed in REVERSE order) and BR-DI-12 (a bus that
+# cannot honour a DispatchMode throws, never degrades to .emit) — plus the
+# reason the provider is an actor at all: awaiting `subscribe`/`intercept` is
+# what makes registration ordering a guarantee instead of a race.
+name = "CoreKitEventBus"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["EventBusProvidingTests", "CoreKitEventBusAssemblyTests"]
+test_file_patterns = ["**/CoreKitTests/EventBus/**.swift"]
+expected_test_min = 16
+timeout_seconds = 300
+description = "EventBusProviding: all four DispatchModes, waterfall ordering, disposer reversibility, and the DI slot. Run: kagami test --scope CoreKitEventBus"
