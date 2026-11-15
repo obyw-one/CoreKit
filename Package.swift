@@ -61,7 +61,8 @@ let package = Package(
         // per [[spm-primitive-reuse-is-mandatory-not-a-question]]: plugins
         // consume CoreKit.ContentHash, never CryptoKit directly.
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.5.2"),
-        // swift-log — AppLog's backend where Apple's `os` is absent (Linux/Windows).
+        // swift-log — the `SwiftLogLogger` implementation of `LoggingProviding`,
+        // on every target (spec c8fa126c BR-L-09).
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.0"),
     ],
     targets: [
@@ -69,9 +70,17 @@ let package = Package(
             name: "CoreKit",
             dependencies: [
                 .product(name: "Crypto", package: "swift-crypto"),
-                .product(
-                    name: "Logging", package: "swift-log",
-                    condition: .when(platforms: [.linux, .windows, .android])),
+                // Spec c8fa126c BR-L-02/BR-L-09: UNCONDITIONAL. It was
+                // conditioned on non-Apple platforms while `AppLog` was a
+                // per-platform typealias; now that `SwiftLogLogger` is a
+                // declared implementation of a portable protocol, the
+                // dependency has to exist on every target or the capability
+                // would be absent on Apple — which is the "import gated away
+                // from a caller" this spec is named after. swift-log is pure
+                // Swift with no system dependency, and a host that wants one
+                // log pipeline across macOS and Linux can now register it on
+                // both.
+                .product(name: "Logging", package: "swift-log"),
             ]
         ),
         .target(
