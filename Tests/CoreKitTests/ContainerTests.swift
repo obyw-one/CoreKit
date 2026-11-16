@@ -1,21 +1,28 @@
 import XCTest
 @testable import CoreKit
 
-/// Results written from the worker threads below. The lock is what makes the
-/// `@unchecked` true: on Linux `DispatchQueue.async` takes a `@Sendable` closure,
-/// so an unguarded captured `var` does not compile, and it was a data race anyway.
-private final class LockedBox<Value: Sendable>: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: Value
+/// A resolve outcome that can cross a concurrency domain.
+///
+/// `Result<Value, any Error>` cannot: `any Error` is not `Sendable`, so the old
+/// `LockedBox<Result<String, Error>?>` was moving a non-sendable existential
+/// between threads behind an `@unchecked` claim. The failure is reduced to its
+/// description at the point it is caught, which is all this suite ever asserted
+/// on, and `get()` keeps the original call shape.
+private enum ResolveOutcome<Value: Sendable>: Sendable {
+    case resolved(Value)
+    case failed(String)
 
-    init(_ value: Value) {
-        self.value = value
+    init(catching body: () throws -> Value) {
+        do { self = .resolved(try body()) } catch { self = .failed(String(describing: error)) }
     }
 
-    func withValue<Output>(_ body: (inout Value) -> Output) -> Output {
-        lock.lock()
-        defer { lock.unlock() }
-        return body(&value)
+    struct Failure: Error, CustomStringConvertible { let description: String }
+
+    func get() throws -> Value {
+        switch self {
+        case .resolved(let value): return value
+        case .failed(let description): throw Failure(description: description)
+        }
     }
 }
 
@@ -137,58 +144,55 @@ final class ContainerTests: XCTestCase {
 
         let group = DispatchGroup()
         let container: Container = self.container
-        let stringOutcome = LockedBox<Result<String, Error>?>(nil)
-        let intOutcome = LockedBox<Result<Int, Error>?>(nil)
+        let stringOutcome = LockedState<ResolveOutcome<String>?>(nil)
+        let intOutcome = LockedState<ResolveOutcome<Int>?>(nil)
 
         // Resolve on two threads concurrently — should NOT false-detect circular dependency
         group.enter()
         DispatchQueue.global().async {
             defer { group.leave() }
-            let outcome = Result { try container.resolve(String.self) }
-            stringOutcome.withValue { $0 = outcome }
+            let outcome = ResolveOutcome { try container.resolve(String.self) }
+            stringOutcome.withLock { $0 = outcome }
         }
 
         group.enter()
         DispatchQueue.global().async {
             defer { group.leave() }
-            let outcome = Result { try container.resolve(Int.self) }
-            intOutcome.withValue { $0 = outcome }
+            let outcome = ResolveOutcome { try container.resolve(Int.self) }
+            intOutcome.withLock { $0 = outcome }
         }
 
         group.wait()
 
-        XCTAssertEqual(try stringOutcome.withValue { $0 }?.get(), "hello")
-        XCTAssertEqual(try intOutcome.withValue { $0 }?.get(), 42)
+        XCTAssertEqual(try stringOutcome.withLock { $0 }?.get(), "hello")
+        XCTAssertEqual(try intOutcome.withLock { $0 }?.get(), 42)
     }
 
     func testConcurrentResolvesOfSameTypeSucceed() throws {
-        var callCount = 0
-        let countLock = NSLock()
+        let callCount = LockedState(0)
         try container.register(String.self, scope: .cached) { _ in
-            countLock.lock()
-            callCount += 1
-            countLock.unlock()
+            callCount.withLock { $0 += 1 }
             return "shared"
         }
 
         let group = DispatchGroup()
         let iterations = 50
         let container: Container = self.container
-        let results = LockedBox<[String?]>(Array(repeating: nil, count: iterations))
+        let results = LockedState<[String?]>(Array(repeating: nil, count: iterations))
 
         for i in 0..<iterations {
             group.enter()
             DispatchQueue.global().async {
                 defer { group.leave() }
                 let resolved = try? container.resolve(String.self)
-                results.withValue { $0[i] = resolved }
+                results.withLock { $0[i] = resolved }
             }
         }
 
         group.wait()
 
         // All should succeed
-        let resolved = results.withValue { $0 }
+        let resolved = results.withLock { $0 }
         for i in 0..<iterations {
             XCTAssertEqual(resolved[i], "shared", "Iteration \(i) should resolve successfully")
         }
@@ -228,8 +232,9 @@ final class ContainerTests: XCTestCase {
     /// never be scheduled — the suite hangs instead of failing. The factory
     /// must run outside the lock, and `.cached` must still publish ONE instance.
     func testCachedFactoryRunsOutsideTheLockAndPublishesOneInstance() async throws {
-        final class Leaf: @unchecked Sendable {}
-        final class Root: @unchecked Sendable { let leaf: Leaf; init(leaf: Leaf) { self.leaf = leaf } }
+        // No mutable state, so no lock and no `@unchecked`: the compiler checks both.
+        final class Leaf: Sendable {}
+        final class Root: Sendable { let leaf: Leaf; init(leaf: Leaf) { self.leaf = leaf } }
         try container.register(Leaf.self, scope: .cached) { _ in
             Thread.sleep(forTimeInterval: 0.01)
             return Leaf()

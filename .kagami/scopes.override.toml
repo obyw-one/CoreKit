@@ -7,7 +7,7 @@ language = "swift"
 package_path = "."
 type_patterns = ["CacheRepositoryTests", "CacheNamingCodecTests", "ContainerTests", "ResolveTests", "ContainerBehaviourTests", "ResolvePropertyWrapperTests", "DIConfigureOnceTests", "InMemoryRepositoryTests", "OrderedQueueTests", "ReconcilerTests", "AssemblyResolutionTests", "ContainerWeakScopeTests"]
 test_file_patterns = ["**/CoreKitTests/*.swift"]
-timeout = 300
+timeout_seconds = 300
 expected_test_min = 133
 description = "CoreKit cache + container + resolve suites. Run: kagami test --scope CoreKitCache"
 
@@ -19,7 +19,7 @@ test_target_name = "CoreKitTests"
 type_patterns = ["DrainLoopTests"]
 test_file_patterns = ["**/CoreKitTests/Drain/**.swift"]
 expected_test_min = 10
-timeout = 600
+timeout_seconds = 600
 description = "Draining + DrainLoop: tick/backoff via FakeDrainClock, quarantine-to-report, in-run idempotency. Run: kagami test --scope CoreKitDrain"
 
 [[scopes]]
@@ -29,7 +29,7 @@ test_target_name = "CoreKitTests"
 type_patterns = ["ContentHashTests"]
 test_file_patterns = ["**/CoreKitTests/Utilities/**.swift"]
 expected_test_min = 6
-timeout = 600
+timeout_seconds = 600
 description = "ContentHash: SHA-256 vectors, format contract, streaming parity. Run: kagami test --scope CoreKitHash"
 
 [[scopes]]
@@ -44,7 +44,7 @@ test_file_patterns = ["**/CoreKitTests/Capacity/**.swift"]
 # 7 tests: T-CP-01/02/03/05/06 in the snapshot suite,
 # T-CP-04/07 in the platform-prober suite.
 expected_test_min = 7
-timeout = 300
+timeout_seconds = 300
 description = "DeviceCapacity: snapshot round-trip, seam ratchet, platform basis, live macOS invariants. Run: kagami test --scope CoreKitCapacity"
 
 [[scopes]]
@@ -56,7 +56,7 @@ package_path = "."
 type_patterns = ["FileIOProfileTests"]
 test_file_patterns = ["**/CoreKitTests/FileIO/**.swift"]
 expected_test_min = 10
-timeout = 300
+timeout_seconds = 300
 description = "FileIOProfile: per-profile write/read round-trips, durable lock-file lifecycle, concurrent-write integrity. Run: kagami test --scope CoreKitFileIO"
 
 [[scopes]]
@@ -222,3 +222,17 @@ test_file_patterns = ["**/CoreKitTests/EventBus/**.swift"]
 expected_test_min = 16
 timeout_seconds = 300
 description = "EventBusProviding: all four DispatchModes, waterfall ordering, disposer reversibility, and the DI slot. Run: kagami test --scope CoreKitEventBus"
+
+[[scopes]]
+# The shrink-only @unchecked Sendable ratchet (spec 610d808a W1, operator
+# ruling 2026-11-16). Counts real conformances — non-comment lines only, so
+# prose about the attribute is not counted — and holds the named allowance
+# list. CoreKit went 13 -> 1 in the wave that added this.
+name = "CoreKitSendable"
+test_target_name = "CoreKitTests"
+package_path = "."
+type_patterns = ["UncheckedSendableRatchetTests"]
+test_file_patterns = ["**/CoreKitTests/Sendable/**.swift"]
+expected_test_min = 5
+timeout_seconds = 300
+description = "@unchecked Sendable shrink-only ratchet + the one-lock-box rule. Run: kagami test --scope CoreKitSendable"

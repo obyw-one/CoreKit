@@ -4,17 +4,17 @@ import Testing
 
 // MARK: - Fixtures
 
-private final class CallCounter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value: Int = 0
+private final class CallCounter: Sendable {
+    private let state = LockedState(0)
+
     func tick() {
-        lock.withLock { value += 1 }
+        state.withLock { $0 += 1 }
     }
 
     /// Named `hits` (not `count`) so swiftlint's empty_count rule does not
     /// rewrite `hits == 0` into a non-existent `isEmpty` at auto-fix time.
     var hits: Int {
-        lock.withLock { value }
+        state.withLock { $0 }
     }
 }
 

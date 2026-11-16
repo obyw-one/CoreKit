@@ -58,13 +58,27 @@ private final class TestUseCase: TestUseCaseProtocol, Sendable {
 private protocol CircularA: Sendable { var b: CircularB? { get } }
 private protocol CircularB: Sendable { var a: CircularA? { get } }
 
-private final class ConcreteCircularA: CircularA, @unchecked Sendable {
-    var b: CircularB?
+// The cycle is built by assigning AFTER init, so the reference genuinely has
+// to be mutable — and the old `@unchecked Sendable` guarded it with nothing at
+// all, which is the shape this epic exists to delete. `LockedState` makes the
+// mutation safe and the `Sendable` conformance checked.
+private final class ConcreteCircularA: CircularA {
+    private let state = LockedState<CircularB?>(nil)
+    var b: CircularB? {
+        get { state.withLock { $0 } }
+        set { state.withLock { $0 = newValue } }
+    }
+
     init(b: CircularB? = nil) { self.b = b }
 }
 
-private final class ConcreteCircularB: CircularB, @unchecked Sendable {
-    var a: CircularA?
+private final class ConcreteCircularB: CircularB {
+    private let state = LockedState<CircularA?>(nil)
+    var a: CircularA? {
+        get { state.withLock { $0 } }
+        set { state.withLock { $0 = newValue } }
+    }
+
     init(a: CircularA? = nil) { self.a = a }
 }
 
