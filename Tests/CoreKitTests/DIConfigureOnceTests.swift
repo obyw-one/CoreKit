@@ -15,28 +15,22 @@ private struct Ping: PingProtocol {
 }
 
 /// Counts how many times the assemblies closure ran, across threads.
-private final class Counter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var value = 0
+private final class Counter: Sendable {
+    private let state = LockedState(0)
+
     func bump() {
-        lock.lock()
-        defer { lock.unlock() }
-        value += 1
+        state.withLock { $0 += 1 }
     }
 
     var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return value
+        state.withLock { $0 }
     }
 
-    /// Reads `value`, not `count`: the lint's `empty_count` autofix rewrites
-    /// `count == 0` to `isEmpty`, which here made this getter call itself
-    /// until the stack overflowed and took the whole test process down.
+    /// Reads the state directly, not `count`: the lint's `empty_count` autofix
+    /// rewrites `count == 0` to `isEmpty`, which here made this getter call
+    /// itself until the stack overflowed and took the whole test process down.
     var isEmpty: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return value == 0
+        state.withLock { $0 == 0 }
     }
 }
 

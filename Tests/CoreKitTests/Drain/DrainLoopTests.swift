@@ -6,17 +6,29 @@ import Testing
 
 /// Scriptable drainer: scans yield programmed batches; chosen ids throw
 /// in process or checkpoint. Lock-guarded so the loop can call it freely.
-private final class ScriptedDrainer: Draining, @unchecked Sendable {
+///
+/// All the mutable fields moved into ONE `LockedState` value rather than
+/// becoming one lock box each: the invariant is across them (a scan is removed
+/// and the ids are appended), so splitting them into separate locks would allow
+/// a torn read that the old single `NSLock` did not.
+private final class ScriptedDrainer: Draining {
     struct Item: Sendable, Equatable { let id: String }
     struct Proof: Sendable { let id: String }
 
-    private let lock = NSLock()
-    private var scanBatches: [[Item]]
-    private var scanError: Error?
+    private struct State: Sendable {
+        var scanBatches: [[Item]]
+        /// The error is kept as its description: `any Error` is not `Sendable`,
+        /// and this suite only ever re-throws it as an opaque failure.
+        var scanErrorDescription: String?
+        var processedIDs: [String] = []
+        var checkpointedIDs: [String] = []
+    }
+
+    private let state: LockedState<State>
     let failProcess: Set<String>
     let failCheckpoint: Set<String>
-    private(set) var processedIDs: [String] = []
-    private(set) var checkpointedIDs: [String] = []
+
+    struct ScriptedScanFailure: Error, CustomStringConvertible { let description: String }
 
     init(
         scans: [[String]],
@@ -24,10 +36,14 @@ private final class ScriptedDrainer: Draining, @unchecked Sendable {
         failCheckpoint: Set<String> = [],
         scanError: Error? = nil
     ) {
-        self.scanBatches = scans.map { $0.map(Item.init(id:)) }
+        self.state = LockedState(
+            State(
+                scanBatches: scans.map { $0.map(Item.init(id:)) },
+                scanErrorDescription: scanError.map { String(describing: $0) }
+            )
+        )
         self.failProcess = failProcess
         self.failCheckpoint = failCheckpoint
-        self.scanError = scanError
     }
 
     func itemID(_ item: Item) -> String {
@@ -35,54 +51,59 @@ private final class ScriptedDrainer: Draining, @unchecked Sendable {
     }
 
     func scan() async throws -> [Item] {
-        if let e = scanError { throw e }
-        return lock.withLock {
-            scanBatches.isEmpty ? [] : scanBatches.removeFirst()
+        try state.withLock { state in
+            if let description = state.scanErrorDescription {
+                throw ScriptedScanFailure(description: description)
+            }
+            return state.scanBatches.isEmpty ? [] : state.scanBatches.removeFirst()
         }
     }
 
     func process(_ item: Item) async throws -> Proof {
         if failProcess.contains(item.id) { throw Failure.boom(item.id) }
-        lock.withLock { processedIDs.append(item.id) }
+        state.withLock { $0.processedIDs.append(item.id) }
         return Proof(id: item.id)
     }
 
     func checkpoint(_ proof: Proof, for item: Item) async throws {
         if failCheckpoint.contains(item.id) { throw Failure.boom(item.id) }
-        lock.withLock { checkpointedIDs.append(proof.id) }
+        state.withLock { $0.checkpointedIDs.append(proof.id) }
     }
 
     enum Failure: Error { case boom(String) }
 
     var processed: [String] {
-        lock.withLock { processedIDs }
+        state.withLock { $0.processedIDs }
     }
 
     var checkpointed: [String] {
-        lock.withLock { checkpointedIDs }
+        state.withLock { $0.checkpointedIDs }
     }
 }
 
 /// Thread-safe collectors for the loop's hooks.
-private final class Collector: @unchecked Sendable {
-    private let lock = NSLock()
-    private var summaries: [DrainTickSummary] = []
-    private var quarantines: [DrainQuarantineRecord] = []
+private final class Collector: Sendable {
+    private struct State: Sendable {
+        var summaries: [DrainTickSummary] = []
+        var quarantines: [DrainQuarantineRecord] = []
+    }
+
+    private let state = LockedState(State())
 
     func add(_ s: DrainTickSummary) {
-        lock.withLock { summaries.append(s) }
+        state.withLock { $0.summaries.append(s) }
     }
 
     func add(_ q: DrainQuarantineRecord) {
-        lock.withLock { quarantines.append(q) }
+        state.withLock { $0.quarantines.append(q) }
     }
 
     var allSummaries: [DrainTickSummary] {
-        lock.withLock { summaries }
+        state.withLock { $0.summaries }
     }
 
     var allQuarantines: [DrainQuarantineRecord] {
-        lock.withLock { quarantines }
+        state.withLock { $0.quarantines }
     }
 }
 

@@ -178,12 +178,14 @@ final class FileIOProfileTests: XCTestCase {
         let writerCount = 8
 
         // Concurrent writes — a real race.
-        let errors = Mutex<[Error]>([])
+        // Error DESCRIPTIONS, not `[any Error]`: the latter is not `Sendable`,
+        // and the assertion below only ever needed emptiness and a message.
+        let errors = LockedState<[String]>([])
         DispatchQueue.concurrentPerform(iterations: writerCount) { i in
             do {
                 try repo.save(id, data: TestModel(id: i, name: "writer-\(i)"))
             } catch {
-                errors.withLock { $0.append(error) }
+                errors.withLock { $0.append(String(describing: error)) }
             }
         }
 
@@ -219,15 +221,6 @@ final class FileIOProfileTests: XCTestCase {
     }
 }
 
-// MARK: - Mutex helper (Swift 6 Sendable, no extra deps)
-
-/// Minimal mutex wrapper for collecting errors across concurrent tasks.
-private final class Mutex<T>: @unchecked Sendable {
-    private var value: T
-    private let lock = NSLock()
-    init(_ value: T) { self.value = value }
-    func withLock<R>(_ body: (inout T) throws -> R) rethrows -> R {
-        lock.lock(); defer { lock.unlock() }
-        return try body(&value)
-    }
-}
+// The local `Mutex<T>` helper that used to live here is gone: it shadowed the
+// name of the stdlib primitive while being an `NSLock` box, and CoreKit now
+// ships the real one as `LockedState` (spec 610d808a, ratchet rule 2).

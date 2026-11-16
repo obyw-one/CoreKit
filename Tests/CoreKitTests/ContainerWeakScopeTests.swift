@@ -4,14 +4,13 @@ import Testing
 
 private protocol Greeter: Sendable { var id: Int { get } }
 private struct ValueGreeter: Greeter { let id: Int }
-private final class ClassGreeter: Greeter, @unchecked Sendable { let id: Int; init(id: Int) { self.id = id } }
+private final class ClassGreeter: Greeter { let id: Int; init(id: Int) { self.id = id } }
 
 /// Counts how many times a factory ran.
-private final class Counter: @unchecked Sendable {
-    private let lock = NSLock()
-    private var count = 0
-    var value: Int { lock.withLock { count } }
-    func bump() -> Int { lock.withLock { count += 1; return count } }
+private final class Counter: Sendable {
+    private let state = LockedState(0)
+    var value: Int { state.withLock { $0 } }
+    func bump() -> Int { state.withLock { $0 += 1; return $0 } }
 }
 
 @Suite("Container .weak scope — a weak reference to a value type is a caller error, not a silent .transient")
