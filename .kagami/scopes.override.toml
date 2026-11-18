@@ -143,11 +143,24 @@ description = "App config: wire shape, service (fetch, cache, fallback), endpoin
 name = "CoreKitJSON"
 test_target_name = "CoreKitTests"
 package_path = "."
-type_patterns = ["JSONHelpersTests", "JSONValueUntypedTests"]
+type_patterns = [
+  "JSONHelpersTests",
+  "JSONValueUntypedTests",
+  # The Codable half. A suite absent from this list is NOT RUN by the scope,
+  # and `expected_test_min` does not catch it: the three suites below were
+  # written, the scope went green, and it had examined the same 14 tests as
+  # before. `ScopeCoverageRatchetTests` is what reported it
+  # (`census.typesOutsideTheirScope.isEmpty`), which is the check the operator
+  # asked for on #32 — "to avoid in the next PR we miss the modification here
+  # and our ci start to be stale".
+  "JSONValueCodableTests",
+  "JSONValueParsingTests",
+  "JSONValueLenientTests",
+]
 test_file_patterns = ["**/CoreKitTests/JSON/**.swift"]
-expected_test_min = 14
+expected_test_min = 31
 timeout_seconds = 300
-description = "JSON helpers and JSONValue(untyped:): bool/int/double discrimination through JSONSerialization, native and bridged. Run: kagami test --scope CoreKitJSON"
+description = "JSON helpers, JSONValue(untyped:) and JSONValue: Codable: bool/int/double discrimination through JSONSerialization and through JSONDecoder, plus the lenient string-or-JSON decode. Run: kagami test --scope CoreKitJSON"
 
 [[scopes]]
 # The code blocks of docs/*.md, compiled and run: a doc whose API moved stops building.
